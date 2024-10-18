@@ -6,7 +6,7 @@ project(
         LANGUAGES CXX
 )
 
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 23)
 
 
 find_package(PythonLibs REQUIRED)
@@ -18,16 +18,23 @@ include_directories(
         "/usr/include/python3.8"
 )
 
-#find_package(Eigen3 REQUIRED)
+find_package(Eigen3 REQUIRED)
 #find_package(Boost REQUIRED)
 #add_subdirectory(src)
 
 #include_directories( ${Boost_INCLUDE_DIR} )
 
-add_executable(${PROJECT_NAME} main.cpp)
+add_executable(${PROJECT_NAME}_1 assignment_1.cpp)
+add_executable(${PROJECT_NAME}_3 assignment_3.cpp)
+
 
 target_link_libraries(
-        ${PROJECT_NAME}
+        ${PROJECT_NAME}_1
         python3.8
+)
+target_link_libraries(
+        ${PROJECT_NAME}_3
+        python3.8
+        Eigen3::Eigen
 )
 #target_link_libraries(main PRIVATE ifd_lib Eigen3::Eigen ${Boost_LIBRARIES})
