@@ -11,7 +11,62 @@
 
 namespace plt = matplotlibcpp;
 
-typedef double value_t;
+typedef std::vector<double> value_t;
+
+std::vector<double> operator+(const std::vector<double>& v1, const std::vector<double>& v2)
+{
+    assert(v1.size() == v2.size());
+    std::vector<double> res(v1.size());
+    std::ranges::transform(v1, v2, res.begin(), std::plus<double>{});
+    return res;
+}
+
+std::vector<double> operator-(const std::vector<double>& v1, const std::vector<double>& v2)
+{
+    assert(v1.size() == v2.size());
+    std::vector<double> res(v1.size());
+    std::ranges::transform(v1, v2, res.begin(), std::minus<double>{});
+    return res;
+}
+
+std::vector<double> operator*(const std::vector<double>& v1, double alpha) {
+    std::vector<double> res(v1.size());
+    std::ranges::transform(v1, res.begin(), [alpha](double el){return alpha*el;});
+    return res;
+}
+
+std::vector<double> operator*(double alpha, const std::vector<double>& v) {
+    return v * alpha;
+}
+
+
+namespace utils
+{
+
+    value_t primitiveToConservative(double gamma, value_t u){
+        return {
+            u[0],
+            u[0]*u[1],
+            u[2] / (gamma - 1.) + 0.5 * u[0] * u[1] * u[1],
+        };
+    }
+
+    value_t conservativeToPrimitive(double gamma, value_t u) {
+        return {
+            u[0],
+            u[1] / u[0],
+            (gamma - 1.) * (u[2] - 0.5 * u[1] * u[1] / u[0]),
+        };
+    }
+
+    value_t test0(double x) {
+        return x <= 0.25 ? primitiveToConservative(1.4, {1.0, 1.0, 1.0}) : primitiveToConservative(1.4, {0.1, 1.0, 1.});
+    }
+
+    value_t test1(double x) {
+        return x <= 0.5 ? primitiveToConservative(1.4, {1.0, 0.0, 1.0}) : primitiveToConservative(1.4, {0.125, 0., 0.1});
+    }
+}
 
 enum NumericalFlux
 {
@@ -24,7 +79,7 @@ enum NumericalFlux
     GOD,
 };
 
-template <NumericalFlux T>
+template <NumericalFlux F>
 class ConservationEquation
 {
 public:
@@ -35,8 +90,8 @@ public:
     }
 
     virtual value_t f(value_t u) = 0;
-    virtual value_t RiemannSolver(value_t u0, value_t u1) = 0;
-    virtual value_t getMaxDt(const std::vector<value_t> &u) = 0;
+    virtual value_t RiemannSolver(const value_t& u0, const value_t& u1) = 0;
+    virtual double getMaxDt(const std::vector<value_t> &u) = 0;
 
     // u.size() = n + 2
     const std::vector<value_t> &getFlux(const std::vector<value_t> &u, double dt)
@@ -129,71 +184,118 @@ value_t ConservationEquation<NumericalFlux::GOD>::_getNumericalFlux(const std::v
     return f(RiemannSolver(u[face_idx], u[face_idx + 1]));
 }
 
+
 template <NumericalFlux T>
-class AdvectionEquation : public ConservationEquation<T>
+class EulerEquation : public ConservationEquation<T>
 {
 public:
-    explicit AdvectionEquation(value_t a, auto... args) : _a(a), ConservationEquation<T>(args...) {};
+    explicit EulerEquation(double gamma, double eps, auto... args) : _gamma(gamma),_eps(eps), ConservationEquation<T>(args...) {
+        this->_max_it = 100;
+    };
 
     value_t f(value_t u)
-    {
-        return this->_a * u;
+    {   
+        const auto& u1 = u[0];
+        const auto& u2 = u[1];
+        const auto& u3 = u[2];
+
+        return {
+            u2,
+            0.5*(3-this->_gamma) * u2 * u2 / u1 + (this->_gamma - 1) * u3,
+            this->_gamma * u2 * u3 / u1 - 0.5 * (this->_gamma - 1) * u2 * u2 * u2 / (u1 * u1)
+        };
     }
 
-    value_t RiemannSolver(value_t u0, value_t u1)
-    {
-        return this->_a > 0 ? u0 : u1;
+    double pressure_function(double p_star, double rhoK, double vK, double pK, double A_K, double B_K, double cs_K) {
+        if(p_star > pK) {
+            // Shock
+            return (p_star - pK) * sqrt(A_K / (p_star + B_K));
+        } else {
+            // Rarefaction
+            return 2. * cs_K / (this->_gamma - 1.) * (std::pow(p_star / pK, (this->_gamma - 1) / 2*this->_gamma) - 1);
+        }
     }
+
+    double pressure_function_derivative(double p_star, double rhoK, double pK, double A_K, double B_K, double cs_K) {
+        if(p_star > pK) {
+            // Shock
+            return sqrt(A_K / (B_K + p_star)) * (1. - (p_star - pK) / (2*(B_K + p_star)));
+        } else {
+            // Rarefaction
+            return (1. / (rhoK*cs_K)) * std::pow(p_star / pK, -(_gamma + 1)/(2*_gamma)); 
+        }
+    }
+    
+    double newtons_raphson_pressure(const value_t& uL, const value_t& uR) {
+        const double& rhoL = uL[0];
+        const double& vL = uL[1];
+        const double& pL = uL[2];
+
+        const double& rhoR = uR[0];
+        const double& vR = uR[1];
+        const double& pR = uR[2];
+
+        const double A_L = 2. / ((this->_gamma + 1) * rhoL);
+        const double A_R = 2. / ((this->_gamma + 1) * rhoL);
+        const double B_K  = (this->_gamma - 1) / (this->_gamma + 1);
+
+        const double cs_L = sqrt(this->_gamma * pL / rhoL);
+        const double cs_R = sqrt(this->_gamma * pR / rhoR);
+
+        double p_star_old;
+        double p_star = 0.5 * (pL + pR);
+
+        int i = 0;
+        do {
+            p_star_old = p_star;
+            const double f_L = pressure_function(p_star_old, rhoL, vL, pL, A_L, B_K, cs_L);
+            const double f_R = pressure_function(p_star_old, rhoR, vR, pR, A_R, B_K, cs_R);
+            const double f = f_R + f_R + (vR - vL);
+            const double f_d_L = pressure_function_derivative(p_star_old, rhoL, pL, A_L, B_K, cs_L);
+            const double f_d_R = pressure_function_derivative(p_star_old, rhoR, pR, A_R, B_K, cs_R);
+            const double f_d = f_d_L + f_d_R;
+            p_star = p_star_old - f / f_d;
+            ++i;
+        } while ((fabs(p_star - p_star_old) / p_star_old) > _eps && i < this->_max_it);
+
+        // if(i != 1)
+        std::cout << i << " " << pL<< " " << pR << " " << p_star << std::endl;
+
+        return p_star;
+    }
+
+    value_t RiemannSolver(const value_t& u0, const value_t& u1)
+    {
+        // get primitive variables
+        const value_t uL = utils::conservativeToPrimitive(this->_gamma, u0);
+        const value_t uR = utils::conservativeToPrimitive(this->_gamma, u1);
+        // Find p*
+        const double p_star = newtons_raphson_pressure(uL, uR);
+
+        // Find v*
+        // Find rho_K*
+        // 
+
+       return 0.5*(u0 + u1);
+    }
+
+
 
     double getMaxDt(const std::vector<value_t> &u)
-    {
-        return this->_C * this->_dx / abs(this->_a);
+    {   
+        double max_a = 0;
+        for(const auto& el: u) {
+            const double cs = sqrt(_gamma* (_gamma - 1.) * (el[2] - 0.5*el[1]*el[1]/el[2]) / el[0]);
+            const double a = abs(el[1] / el[0]) + cs;
+            max_a = std::max<double>(max_a, a);
+        }
+        return this->_C * this->_dx / max_a;
     }
 
 private:
-    value_t _a;
-};
-
-template <NumericalFlux T>
-class BurgersEquation : public ConservationEquation<T>
-{
-public:
-    explicit BurgersEquation(auto... args) : ConservationEquation<T>(args...) {};
-
-    value_t f(value_t u)
-    {
-        return 0.5 * u * u;
-    }
-
-    value_t RiemannSolver(value_t u0, value_t u1)
-    {
-        const value_t S = 0.5 * (u0 + u1);
-        if (u0 > u1)
-        {
-            return S > 0 ? u0 : u1;
-        }
-        else
-        {
-            if (u0 > 0)
-            {
-                return u0;
-            }
-            else if (u1 < 0)
-            {
-                return u1;
-            }
-            else
-            {
-                return 0.;
-            }
-        }
-    }
-
-    double getMaxDt(const std::vector<value_t> &u)
-    {
-        return this->_C * this->_dx / std::ranges::max(std::views::transform(u, [](value_t el)
-                                                                             { return fabs(el); }));
-    }
+    double _gamma;
+    double _eps;
+    int _max_it;
 };
 
 class Mesh
@@ -261,7 +363,7 @@ template <NumericalFlux T>
 class Simulation
 {
 public:
-    Simulation(double final_time, ConservationEquation<T> &eq, Mesh mesh, std::function<double(double)> ic) : _final_time(
+    Simulation(double final_time, ConservationEquation<T> &eq, Mesh mesh, std::function<value_t(double)> ic) : _final_time(
                                                                                                                   final_time),
                                                                                                               _eq(eq), _mesh(mesh)
     {
@@ -307,10 +409,13 @@ public:
     void plot(double blim = -1.0, double tlim = 1.0)
     {
         plt::clf();
-        plt::ylim(blim, tlim);
-        plt::plot(_mesh.getFullCellPoints(), solution, "r*");
-        //        plt::show();
-        plt::pause(0.01);
+        // plt::ylim(blim, tlim);
+        std::vector<double> density;
+        density.resize(solution.size());
+        std::ranges::transform(solution, density.begin(), [&](value_t u){return u[0];});
+        plt::plot(_mesh.getFullCellPoints(), density, "r*");
+        plt::show();
+        // plt::pause(0.01);
     }
 
     std::vector<value_t> solution;
@@ -325,24 +430,8 @@ private:
     std::vector<value_t> _solution_buffer;
 };
 
-namespace IC
-{
-    value_t shock_wave_RP(value_t x)
-    {
-        return x < 0.5 ? 2 : 1;
-    }
 
-    value_t rarefaction_RP(value_t x)
-    {
-        return x < 0.5 ? 2 : 1;
-    }
 
-    value_t cosine_IVP(value_t x)
-    {
-        return std::cos(2 * M_PI * x);
-    }
-
-}
 
 int main(int argc, char *argv[])
 {
@@ -356,14 +445,16 @@ int main(int argc, char *argv[])
 
     // value_t a = 1.0;
     // AdvectionEquation<NumericalFlux::LF> equation(a, n, mesh.getDx(), C);
-    BurgersEquation<NumericalFlux::GOD> equation(n, mesh.getDx(), C);
+    EulerEquation<NumericalFlux::GOD> equation(1.4, 1e-6, n, mesh.getDx(), C);
 
-    Simulation sim(final_time, equation, mesh, IC::rarefaction_RP);
+    Simulation sim(final_time, equation, mesh, utils::test1);
+    sim.evolve();
+
     sim.plot();
-    while (sim.evolve())
-    {
-        sim.plot(0, 3);
-    }
+    // while (sim.evolve())
+    // {
+    //     sim.plot();
+    // }
 
     return 0;
 }
