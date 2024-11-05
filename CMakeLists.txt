@@ -27,6 +27,7 @@ find_package(Eigen3 REQUIRED)
 add_executable(${PROJECT_NAME}_1 assignment_1.cpp)
 add_executable(${PROJECT_NAME}_3 assignment_3.cpp)
 add_executable(${PROJECT_NAME}_4 assignment_4.cpp)
+add_executable(${PROJECT_NAME}_7 assignment_7.cpp)
 
 
 
@@ -42,6 +43,12 @@ target_link_libraries(
 
 target_link_libraries(
         ${PROJECT_NAME}_4
+        python3.8
+        Eigen3::Eigen
+)
+
+target_link_libraries(
+        ${PROJECT_NAME}_7
         python3.8
         Eigen3::Eigen
 )

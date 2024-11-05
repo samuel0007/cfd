@@ -25,10 +25,10 @@ enum NumericalFlux
 };
 
 template <NumericalFlux T>
-class ConservationEquation
+class ConservationEquation1D
 {
 public:
-    ConservationEquation(size_t n, double dx, double C = 0.9) : _n(n), _nCells(n + 2), _dx(dx), _C(C)
+    ConservationEquation1D(size_t n, double dx, double C = 0.9) : _n(n), _nCells(n + 2), _dx(dx), _C(C)
     {
         this->_flux.resize(_n + 1);
         this->_fluxFunctionAtCells.resize(_n + 2);
@@ -88,52 +88,52 @@ protected:
 };
 
 template <>
-value_t ConservationEquation<NumericalFlux::Forward>::_getNumericalFlux(const std::vector<value_t> &u, size_t face_idx)
+value_t ConservationEquation1D<NumericalFlux::Forward>::_getNumericalFlux(const std::vector<value_t> &u, size_t face_idx)
 {
     return this->_fluxFunctionAtCells[face_idx];
 }
 
 template <>
-value_t ConservationEquation<NumericalFlux::Central>::_getNumericalFlux(const std::vector<value_t> &u, size_t face_idx)
+value_t ConservationEquation1D<NumericalFlux::Central>::_getNumericalFlux(const std::vector<value_t> &u, size_t face_idx)
 {
     return 0.5 * (this->_fluxFunctionAtCells[face_idx] + this->_fluxFunctionAtCells[face_idx + 1]);
 }
 
 template <>
-value_t ConservationEquation<NumericalFlux::Backward>::_getNumericalFlux(const std::vector<value_t> &u, size_t face_idx)
+value_t ConservationEquation1D<NumericalFlux::Backward>::_getNumericalFlux(const std::vector<value_t> &u, size_t face_idx)
 {
     return this->_fluxFunctionAtCells[face_idx + 1];
 }
 
 template <>
-value_t ConservationEquation<NumericalFlux::LF>::_getNumericalFlux(const std::vector<value_t> &u, size_t face_idx)
+value_t ConservationEquation1D<NumericalFlux::LF>::_getNumericalFlux(const std::vector<value_t> &u, size_t face_idx)
 {
     return _getNumericalFluxLF(u, face_idx);
 }
 
 template <>
-value_t ConservationEquation<NumericalFlux::RI>::_getNumericalFlux(const std::vector<value_t> &u, size_t face_idx)
+value_t ConservationEquation1D<NumericalFlux::RI>::_getNumericalFlux(const std::vector<value_t> &u, size_t face_idx)
 {
     return _getNumericalFluxRI(u, face_idx);
 }
 
 template <>
-value_t ConservationEquation<NumericalFlux::FORCE>::_getNumericalFlux(const std::vector<value_t> &u, size_t face_idx)
+value_t ConservationEquation1D<NumericalFlux::FORCE>::_getNumericalFlux(const std::vector<value_t> &u, size_t face_idx)
 {
     return 0.5 * (_getNumericalFluxRI(u, face_idx) + _getNumericalFluxLF(u, face_idx));
 }
 
 template <>
-value_t ConservationEquation<NumericalFlux::GOD>::_getNumericalFlux(const std::vector<value_t> &u, size_t face_idx)
+value_t ConservationEquation1D<NumericalFlux::GOD>::_getNumericalFlux(const std::vector<value_t> &u, size_t face_idx)
 {
     return f(RiemannSolver(u[face_idx], u[face_idx + 1]));
 }
 
 template <NumericalFlux T>
-class AdvectionEquation : public ConservationEquation<T>
+class AdvectionEquation : public ConservationEquation1D<T>
 {
 public:
-    explicit AdvectionEquation(value_t a, auto... args) : _a(a), ConservationEquation<T>(args...) {};
+    explicit AdvectionEquation(value_t a, auto... args) : _a(a), ConservationEquation1D<T>(args...) {};
 
     value_t f(value_t u)
     {
@@ -155,10 +155,10 @@ private:
 };
 
 template <NumericalFlux T>
-class BurgersEquation : public ConservationEquation<T>
+class BurgersEquation : public ConservationEquation1D<T>
 {
 public:
-    explicit BurgersEquation(auto... args) : ConservationEquation<T>(args...) {};
+    explicit BurgersEquation(auto... args) : ConservationEquation1D<T>(args...) {};
 
     value_t f(value_t u)
     {
@@ -261,7 +261,7 @@ template <NumericalFlux T>
 class Simulation
 {
 public:
-    Simulation(double final_time, ConservationEquation<T> &eq, Mesh mesh, std::function<double(double)> ic) : _final_time(
+    Simulation(double final_time, ConservationEquation1D<T> &eq, Mesh mesh, std::function<double(double)> ic) : _final_time(
                                                                                                                   final_time),
                                                                                                               _eq(eq), _mesh(mesh)
     {
@@ -320,7 +320,7 @@ private:
     double _dt;
     double _ct = 0.;
     double _final_time;
-    ConservationEquation<T> &_eq;
+    ConservationEquation1D<T> &_eq;
     Mesh _mesh;
     std::vector<value_t> _solution_buffer;
 };
