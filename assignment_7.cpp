@@ -69,7 +69,8 @@ namespace utils
         return {
             u[0],
             u[0]*u[1],
-            u[2] / (gamma - 1.) + 0.5 * u[0] * u[1] * u[1],
+            u[0]*u[2],
+            u[3] / (gamma - 1.) + 0.5 * u[0] * (u[1] * u[1] + u[2] * u[2]),
         };
     }
 
@@ -77,7 +78,8 @@ namespace utils
         return {
             u[0],
             u[1] / u[0],
-            (gamma - 1.) * (u[2] - 0.5 * u[1] * u[1] / u[0]),
+            u[2] / u[0],
+            (gamma - 1.) * (u[3] - 0.5 * (u[1] * u[1] + u[2] * u[2]) / u[0]),
         };
     }
 
@@ -92,6 +94,25 @@ namespace utils
             }
         }
         return res;
+    }
+
+    value_t test0_2d(point_t x) {
+        return x[0] <= 0.25 ? primitiveToConservative(1.4, {1.0, 1.0, 0.0, 1.0}) : primitiveToConservative(1.4, {0.1, 1.0, 0.0, 1.});
+    }
+
+    value_t test2_2d(point_t x) {
+        return x[0] <= 0.5 ? primitiveToConservative(1.4, {1.0, -2.0, 0.5, 0.4}) : primitiveToConservative(1.4, {1.0, 2.0, 0.5, 0.4});
+    }
+
+    value_t test3_2d(point_t x) {
+        double x_0 = 1.;
+        double y_0 = 1.;
+        double R = 0.4;
+        if((x[0] - x_0) * (x[0] - x_0) + (x[1] - y_0) * (x[1] - y_0) < R*R) {
+            return {1, 0, 0, 1};
+        } else {
+            return {0.125, 0, 0, 0.1};
+        }
     }
 
     value_t test0(point_t x) {
@@ -250,11 +271,13 @@ namespace NumericalFlux {
     class FORCE: public FluxPolicy<FORCE<ProblemT>, ProblemT>  {
     public:
         value_t _getNumericalFlux(std::ranges::input_range auto&& fluxFunctionAtCells, std::ranges::input_range auto&& u, size_t face_idx, double dt, double dx) {
-            return 0.5 * (this->_getNumericalFluxRI(u, face_idx) + this->_getNumericalFluxLF(u, face_idx));
+            return 0.5 * (this->_getNumericalFluxRI(fluxFunctionAtCells, u, face_idx, dt, dx) + this->_getNumericalFluxLF(fluxFunctionAtCells, u, face_idx, dt, dx));
         }
     };
 }
 
+
+template <typename DIRECTION>
 class EulerProblem1D {
 public:
     explicit EulerProblem1D(double gamma, double eps) : _gamma(gamma), _eps(eps) {
@@ -263,15 +286,7 @@ public:
 
     value_t f(value_t u)
     {   
-        const auto& u1 = u[0];
-        const auto& u2 = u[1];
-        const auto& u3 = u[2];
-
-        return {
-            u2,
-            0.5*(3-this->_gamma) * u2 * u2 / u1 + (this->_gamma - 1) * u3,
-            this->_gamma * u2 * u3 / u1 - 0.5 * (this->_gamma - 1) * u2 * u2 * u2 / (u1 * u1)
-        };
+        return static_cast<DIRECTION&>(*this)._f(u);
     }
 
     double pressure_function(double p_star, double rhoK, double vK, double pK, double A_K, double B_K, double cs_K) {
@@ -369,14 +384,14 @@ public:
     {   
         double max_a = 0;
         for(const auto& el: u) {
-            const double cs = sqrt(_gamma* (_gamma - 1.) * (el[2] - 0.5*el[1]*el[1]/el[2]) / el[0]);
+            const double cs = sqrt(_gamma* (_gamma - 1.) * (el[3] - 0.5*el[1]*el[1]/el[3]) / el[0]);
             const double a = abs(el[1] / el[0]) + cs;
             max_a = std::max<double>(max_a, a);
         }
         return C * dx / max_a;
     }
 
-private:
+protected:
     value_t RiemannSolverPrimitive(const value_t& uL, const value_t& uR)
     {
         const double& rhoL = uL[0];
@@ -445,6 +460,46 @@ private:
     double _gamma;
     double _eps;
     int _max_it;
+};
+
+class F: public EulerProblem1D<F> {
+public:
+    value_t _f(value_t u)
+    {   
+        auto q = utils::conservativeToPrimitive(this->_gamma, u);
+        const auto& rho = q[0];
+        const auto& vx = q[1];
+        const auto& vy = q[2];
+        const auto& p = q[3];
+        const auto& E = u[3];
+
+        return {
+            rho * vx,
+            rho * vx * vx + p,
+            rho * vx * vy,
+            (E + p)*vx,
+        };
+    }
+};
+
+class G: public EulerProblem1D<G> {
+public:
+    value_t _f(value_t u)
+    {   
+        auto q = utils::conservativeToPrimitive(this->_gamma, u);
+        const auto& rho = q[0];
+        const auto& vx = q[1];
+        const auto& vy = q[2];
+        const auto& p = q[3];
+        const auto& E = u[3];
+
+        return {
+            rho * vy,
+            rho * vx * vy,
+            rho * vy * vy + p,
+            (E + p)*vy,
+        };
+    }
 };
 
 class Mesh
@@ -617,35 +672,35 @@ public:
         const double _dtdx = min_dt / this->_mesh.getDx();
 
         // X sweep
-        // for (size_t i = 1; i < this->nx + 1; ++i) {
-        //     const v1Dvalue_t &flux = this->_eq_f.getFlux(solution[i], min_dt);
-        //     for(size_t j = 1; j < this->ny + 1; ++j)
-        //     {
-        //         this->_solution_buffer[i][j] = solution[i][j] - _dtdx * (flux[j] - flux[j - 1]);
-        //     }
-        // }
+        for (size_t i = 1; i < this->nx + 1; ++i) {
+            const v1Dvalue_t &flux = this->_eq_f.getFlux(solution[i], min_dt);
+            for(size_t j = 1; j < this->ny + 1; ++j)
+            {
+                this->_solution_buffer[i][j] = solution[i][j] - _dtdx * (flux[j] - flux[j - 1]);
+            }
+        }
 
-        // for(size_t i = 1; i < this->nx + 1; ++i) {
-        //     for(size_t j = 1; j < this->ny + 1; ++j) {
-        //         this->solution[i][j] = this->_solution_buffer[i][j];
-        //     }
-        // }
+        for(size_t i = 1; i < this->nx + 1; ++i) {
+            for(size_t j = 1; j < this->ny + 1; ++j) {
+                this->solution[i][j] = this->_solution_buffer[i][j];
+            }
+        }
 
-        // // Transmissive BCs
-        // this->solution[0][0] = this->solution[1][1];
-        // this->solution[nx+1][ny+1] = this->solution[nx][ny];
-        // this->solution[nx + 1][0] = this->solution[nx][0];
-        // this->solution[0][ny + 1] = this->solution[0][ny];
+        // Transmissive BCs
+        this->solution[0][0] = this->solution[1][1];
+        this->solution[nx+1][ny+1] = this->solution[nx][ny];
+        this->solution[nx + 1][0] = this->solution[nx][0];
+        this->solution[0][ny + 1] = this->solution[0][ny];
 
-        // for(int j = 1; j < ny + 1; ++j) {
-        //     this->solution[0][j] = this->solution[1][j];
-        //     this->solution[nx + 1][j] = this->solution[nx][j];
-        // }
+        for(int j = 1; j < ny + 1; ++j) {
+            this->solution[0][j] = this->solution[1][j];
+            this->solution[nx + 1][j] = this->solution[nx][j];
+        }
 
-        // for(int i = 1; i < nx + 1; ++i) {
-        //     this->solution[i][0] = this->solution[i][1];
-        //     this->solution[i][ny + 1] = this->solution[i][ny];
-        // }
+        for(int i = 1; i < nx + 1; ++i) {
+            this->solution[i][0] = this->solution[i][1];
+            this->solution[i][ny + 1] = this->solution[i][ny];
+        }
 
         const double _dtdy = min_dt / this->_mesh.getDy();
 
@@ -696,34 +751,43 @@ public:
 
         vvalue_t primitive_values = utils::conservativeToPrimitive(1.4, solution);
         std::vector<float> density(nx*ny);
-        std::vector<float> velocity(nx*ny);
+        std::vector<float> velocity_x(nx*ny);
+        std::vector<float> velocity_y(nx*ny);
         std::vector<float> pressure(nx*ny);
 
         for(int i = 0; i < nx; ++i) {
             for(int j = 0; j < ny; ++j) {
                 density[j + i*ny] = primitive_values[i][j][0];
-                velocity[j + i*ny] = primitive_values[i][j][1];
-                pressure[j + i*ny] = primitive_values[i][j][2];
+                velocity_x[j + i*ny] = primitive_values[i][j][1];
+                velocity_y[j + i*ny] = primitive_values[i][j][2];
+                pressure[j + i*ny] = primitive_values[i][j][3];
             }
         }
 
-        std::cout << std::ranges::max(velocity) << std::endl;
-
+        std::cout << std::ranges::max(velocity_x) << std::endl;
+        std::cout << std::ranges::max(velocity_y) << std::endl;
 
         plt::suptitle(boost::lexical_cast<std::string>(this->_ct));
-
-        plt::subplot(1, 3, 1);
+        const float* pVx = &(velocity_x[0]);
+        const float* pVy = &(velocity_y[0]);
         const float* pD = &(density[0]);
+        const float* pP = &(pressure[0]);
+        
+        plt::subplot(2, 2, 1);
+        plt::imshow(pP, nx, ny, 1);
+
+        plt::subplot(2, 2, 2);
         plt::imshow(pD, nx, ny, 1);
 
-        plt::subplot(1, 3, 2);
-        const float* pV = &(velocity[0]);
-        plt::imshow(pV, nx, ny, 1);
+        plt::subplot(2, 2, 3);
+        plt::imshow(pVx, nx, ny, 1);
 
-        plt::subplot(1, 3, 3);
-        const float* pP = &(pressure[0]);
-        plt::imshow(pP, nx, ny, 1);
+        plt::subplot(2, 2, 4);
+        plt::imshow(pVy, nx, ny, 1);
+
         plt::pause(0.01);
+        // plt::show();
+
 
     }
     void plot(double blim = -1.0, double tlim = 1.0)
@@ -732,15 +796,18 @@ public:
         
         std::vector<value_t> primitive_values(solution.size());
         std::vector<double> density(solution.size());
-        std::vector<double> velocity(solution.size());
+        std::vector<double> velocity_x(solution.size());
+        std::vector<double> velocity_y(solution.size());
         std::vector<double> pressure(solution.size());
         // plt::ylim(std::ranges::min(density), std::ranges::max(density));
         
         // TODO
         std::ranges::transform(solution, primitive_values.begin(), [&](value_t u){return utils::conservativeToPrimitive(1.4, u);});
         std::ranges::transform(primitive_values, density.begin(), [&](value_t u){return u[0];});
-        std::ranges::transform(primitive_values, velocity.begin(), [&](value_t u){return u[1];});
-        std::ranges::transform(primitive_values, pressure.begin(), [&](value_t u){return u[2];});
+        std::ranges::transform(primitive_values, velocity_x.begin(), [&](value_t u){return u[1];});
+        std::ranges::transform(primitive_values, velocity_y.begin(), [&](value_t u){return u[2];});
+        std::ranges::transform(primitive_values, pressure.begin(), [&](value_t u){return u[3];});
+
         
         // plt::ylim(std::ranges::min(density), std::ranges::max(density));
 
@@ -749,12 +816,14 @@ public:
         // }
         // std::cout << "\n";
         plt::suptitle(boost::lexical_cast<std::string>(this->_ct));
-        plt::subplot(1, 3, 1);
+        plt::subplot(2, 2, 1);
         plt::plot(_mesh.getFullCellPoints(), density, "r*");
-        plt::subplot(1, 3, 2);
-        plt::plot(_mesh.getFullCellPoints(), velocity, "r*");
-        plt::subplot(1, 3, 3);
+        plt::subplot(2, 2, 2);
         plt::plot(_mesh.getFullCellPoints(), pressure, "r*");
+        plt::subplot(2, 2, 3);
+        plt::plot(_mesh.getFullCellPoints(), velocity_x, "r*");
+        plt::subplot(2, 2, 3);
+        plt::plot(_mesh.getFullCellPoints(), velocity_x, "r*");
         // plt::show();
         plt::pause(0.01);
     }
@@ -777,28 +846,32 @@ private:
 
 int main(int argc, char *argv[])
 {
-    int nx = 30;
-    int ny = 30;
+    int nx = 80;
+    int ny = 80;
 
     double min_x = 0;
-    double max_x = 1;
+    double max_x = 2;
     double min_y = 0.;
-    double max_y = 1.;
-    double final_time = 1.0;
+    double max_y = 2.;
+    double final_time = 10.0;
     double C = 0.1;
 
     Mesh mesh(nx, ny, min_x, max_x, min_y, max_y);
 
     // value_t a = 1.0;
     // F
-    EulerProblem1D problem(1.4, 1e-10);
-    NumericalFlux::FluxPolicy<NumericalFlux::GOD<EulerProblem1D>, EulerProblem1D> fluxPolicy(problem);
-    ConservationEquation1D equation_f(nx, mesh.getDx(), problem, fluxPolicy, C);
+    EulerProblem1D<F> problem_F(1.4, 1e-10);
+    EulerProblem1D<G> problem_G(1.4, 1e-10);
+
+    NumericalFlux::FluxPolicy<NumericalFlux::FORCE<EulerProblem1D<F>>, EulerProblem1D<F>> fluxPolicy_F(problem_F);
+    NumericalFlux::FluxPolicy<NumericalFlux::FORCE<EulerProblem1D<G>>, EulerProblem1D<G>> fluxPolicy_G(problem_G);
+
+    ConservationEquation1D equation_f(nx, mesh.getDx(), problem_F, fluxPolicy_F, C);
     // G
-    ConservationEquation1D equation_g(ny, mesh.getDy(), problem, fluxPolicy, C);
+    ConservationEquation1D equation_g(ny, mesh.getDy(), problem_G, fluxPolicy_G, C);
 
 
-    Simulation sim(final_time, equation_f, equation_g, mesh, utils::test1);
+    Simulation sim(final_time, equation_f, equation_g, mesh, utils::test3_2d);
     // sim.evolve();
     // sim.plot();
     // sim.evolve();
@@ -808,7 +881,7 @@ int main(int argc, char *argv[])
     int i = 0;
     while (sim.evolve())
     {
-        if(i%10 == 0)
+        if(i%5 == 0)
             sim.plot2d();
         ++i;
     }
