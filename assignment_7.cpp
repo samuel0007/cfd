@@ -17,8 +17,8 @@ typedef std::vector<std::vector<value_t>> vvalue_t;
 typedef std::vector<value_t> v1Dvalue_t;
 
 
-typedef std::array<double, 2> point_t;
-typedef std::vector<std::vector<point_t>> vpoint_t;
+typedef std::array<double, 2> point2D_t;
+typedef std::vector<std::vector<point2D_t>> vpoint2D_t;
 
 
 class ColumnView {
@@ -65,7 +65,7 @@ std::vector<double> operator*(double alpha, const std::vector<double>& v) {
 namespace utils
 {
 
-    value_t primitiveToConservative(double gamma, value_t u){
+    value_t primitiveToConservative2D(double gamma, value_t u){
         return {
             u[0],
             u[0]*u[1],
@@ -96,15 +96,15 @@ namespace utils
         return res;
     }
 
-    value_t test0_2d(point_t x) {
-        return x[0] <= 0.25 ? primitiveToConservative(1.4, {1.0, 1.0, 0.0, 1.0}) : primitiveToConservative(1.4, {0.1, 1.0, 0.0, 1.});
+    value_t test0_2d(point2D_t x) {
+        return x[0] <= 0.25 ? primitiveToConservative2D(1.4, {1.0, 1.0, 0.0, 1.0}) : primitiveToConservative2D(1.4, {0.1, 1.0, 0.0, 1.});
     }
 
-    value_t test2_2d(point_t x) {
-        return x[0] <= 0.5 ? primitiveToConservative(1.4, {1.0, -2.0, 0.5, 0.4}) : primitiveToConservative(1.4, {1.0, 2.0, 0.5, 0.4});
+    value_t test2_2d(point2D_t x) {
+        return x[0] <= 0.5 ? primitiveToConservative2D(1.4, {1.0, -2.0, 0.5, 0.4}) : primitiveToConservative2D(1.4, {1.0, 2.0, 0.5, 0.4});
     }
 
-    value_t test3_2d(point_t x) {
+    value_t test3_2d(point2D_t x) {
         double x_0 = 1.;
         double y_0 = 1.;
         double R = 0.4;
@@ -115,28 +115,28 @@ namespace utils
         }
     }
 
-    value_t test0(point_t x) {
-        return x[0] <= 0.25 ? primitiveToConservative(1.4, {1.0, 1.0, 1.0}) : primitiveToConservative(1.4, {0.1, 1.0, 1.});
+    value_t test0(point2D_t x) {
+        return x[0] <= 0.25 ? primitiveToConservative2D(1.4, {1.0, 1.0, 1.0}) : primitiveToConservative2D(1.4, {0.1, 1.0, 1.});
     }
 
-    value_t test1(point_t x) {
-        return x[0] <= 0.5 ? primitiveToConservative(1.4, {1.0, 0.0, 1.0}) : primitiveToConservative(1.4, {0.125, 0., 0.1});
+    value_t test1(point2D_t x) {
+        return x[0] <= 0.5 ? primitiveToConservative2D(1.4, {1.0, 0.0, 1.0}) : primitiveToConservative2D(1.4, {0.125, 0., 0.1});
     }
 
     value_t test2(double x) {
-        return x <= 0.5 ? primitiveToConservative(1.4, {1.0, -2.0, 0.4}) : primitiveToConservative(1.4, {1.0, 2.0, 0.4});
+        return x <= 0.5 ? primitiveToConservative2D(1.4, {1.0, -2.0, 0.4}) : primitiveToConservative2D(1.4, {1.0, 2.0, 0.4});
     }
 
     value_t test3(double x) {
-        return x <= 0.5 ? primitiveToConservative(1.4, {1.0, 0.0, 1000.}) : primitiveToConservative(1.4, {1.0, 0., 0.01});
+        return x <= 0.5 ? primitiveToConservative2D(1.4, {1.0, 0.0, 1000.}) : primitiveToConservative2D(1.4, {1.0, 0., 0.01});
     }
 
     value_t test4(double x) {
-        return x <= 0.5 ? primitiveToConservative(1.4, {1.0, 0.0, 0.01}) : primitiveToConservative(1.4, {1.0, 0., 100.});
+        return x <= 0.5 ? primitiveToConservative2D(1.4, {1.0, 0.0, 0.01}) : primitiveToConservative2D(1.4, {1.0, 0., 100.});
     }
 
     value_t test5(double x) {
-        return x <= 0.5 ? primitiveToConservative(1.4, {5.99924, 19.5975, 460.894}) : primitiveToConservative(1.4, {5.99242, -6.19633, 46.095});
+        return x <= 0.5 ? primitiveToConservative2D(1.4, {5.99924, 19.5975, 460.894}) : primitiveToConservative2D(1.4, {5.99242, -6.19633, 46.095});
     }
 }
 
@@ -155,11 +155,11 @@ namespace utils
 
 
 
-template <typename ProblemT, typename FluxPolicyT>
+template <typename ProblemT, typename NumericalFluxT>
 class ConservationEquation1D
 {   
 public:
-    ConservationEquation1D(size_t n, double dx, ProblemT& problem, FluxPolicyT& fluxPolicy, double C = 0.9) : _n(n), _nCells(n + 2), _dx(dx), _C(C), _problem(problem), _fluxPolicy(fluxPolicy)
+    ConservationEquation1D(size_t n, double dx, ProblemT& problem, NumericalFluxT& fluxPolicy, double C = 0.9) : _n(n), _nCells(n + 2), _dx(dx), _C(C), _problem(problem), _fluxPolicy(fluxPolicy)
     {
         this->_flux.resize(_n + 1);
         this->_fluxFunctionAtCells.resize(_n + 2);
@@ -194,7 +194,7 @@ protected:
     double _dtdx;
     double _C;
     ProblemT& _problem;
-    FluxPolicyT& _fluxPolicy;
+    NumericalFluxT& _fluxPolicy;
 };
 
 namespace NumericalFlux {
@@ -377,7 +377,7 @@ public:
         const value_t uL = utils::conservativeToPrimitive(this->_gamma, u0);
         const value_t uR = utils::conservativeToPrimitive(this->_gamma, u1);
 
-        return utils::primitiveToConservative(this->_gamma, RiemannSolverPrimitive(uL, uR));
+        return utils::primitiveToConservative2D(this->_gamma, RiemannSolverPrimitive(uL, uR));
     }
 
     double getMaxDt(std::ranges::input_range auto&& u, double C, double dx)
@@ -527,7 +527,7 @@ public:
         for (int i = 0; i < nx; ++i) {
             this->_cellPoints[i].resize(ny);
             for(int j = 0; j < ny; j++) {
-                const point_t& p = this->_points[i][j];
+                const point2D_t& p = this->_points[i][j];
                 this->_cellPoints[i][j] = {p[0] + _dx * 0.5, p[1] + _dy * 0.5};
             }
         }
@@ -568,17 +568,17 @@ public:
         }
     }
 
-    const vpoint_t &getPoints()
+    const vpoint2D_t &getPoints()
     {
         return _points;
     }
 
-    const vpoint_t &getCellPoints()
+    const vpoint2D_t &getCellPoints()
     {
         return _cellPoints;
     }
 
-    const vpoint_t &getFullCellPoints()
+    const vpoint2D_t &getFullCellPoints()
     {
         return _fullCellPoints;
     }
@@ -604,9 +604,9 @@ private:
     double _ly{};
     const int _nx;
     const int _ny;
-    vpoint_t _points;
-    vpoint_t _cellPoints;
-    vpoint_t _fullCellPoints; // Include ghost cells
+    vpoint2D_t _points;
+    vpoint2D_t _cellPoints;
+    vpoint2D_t _fullCellPoints; // Include ghost cells
 };
 
 
@@ -614,12 +614,12 @@ template <typename F1, typename F2, typename P1, typename P2>
 class Simulation
 {
 public:
-    Simulation(double final_time, ConservationEquation1D<P1, F1> &eq_f, ConservationEquation1D<P2, F2> &eq_g, Mesh mesh, std::function<value_t(point_t)> ic) : _final_time(
+    Simulation(double final_time, ConservationEquation1D<P1, F1> &eq_f, ConservationEquation1D<P2, F2> &eq_g, Mesh mesh, std::function<value_t(point2D_t)> ic) : _final_time(
                                                                                                                   final_time),
                                                                                                               _eq_f(eq_f), _eq_g(eq_g),_mesh(mesh)
     {
-        const vpoint_t &mesh_points = mesh.getPoints();
-        const vpoint_t &mesh_fullCellPoints = mesh.getFullCellPoints();
+        const vpoint2D_t &mesh_points = mesh.getPoints();
+        const vpoint2D_t &mesh_fullCellPoints = mesh.getFullCellPoints();
         this->nx = mesh.getCellPoints().size();
         this->ny = mesh.getCellPoints()[0].size();
 
@@ -846,15 +846,15 @@ private:
 
 int main(int argc, char *argv[])
 {
-    int nx = 80;
-    int ny = 80;
+    int nx = 200;
+    int ny = 200;
 
     double min_x = 0;
     double max_x = 2;
     double min_y = 0.;
     double max_y = 2.;
     double final_time = 10.0;
-    double C = 0.1;
+    double C = 0.8;
 
     Mesh mesh(nx, ny, min_x, max_x, min_y, max_y);
 

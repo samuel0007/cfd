@@ -44,7 +44,7 @@ std::vector<double> operator*(double alpha, const std::vector<double>& v) {
 namespace utils
 {
 
-    value_t primitiveToConservative(double gamma, value_t u){
+    value_t primitiveToConservative2D(double gamma, value_t u){
         return {
             u[0],
             u[0]*u[1],
@@ -61,27 +61,27 @@ namespace utils
     }
 
     value_t test0(double x) {
-        return x <= 0.25 ? primitiveToConservative(1.4, {1.0, 1.0, 1.0}) : primitiveToConservative(1.4, {0.1, 1.0, 1.});
+        return x <= 0.25 ? primitiveToConservative2D(1.4, {1.0, 1.0, 1.0}) : primitiveToConservative2D(1.4, {0.1, 1.0, 1.});
     }
 
     value_t test1(double x) {
-        return x <= 0.5 ? primitiveToConservative(1.4, {1.0, 0.0, 1.0}) : primitiveToConservative(1.4, {0.125, 0., 0.1});
+        return x <= 0.5 ? primitiveToConservative2D(1.4, {1.0, 0.0, 1.0}) : primitiveToConservative2D(1.4, {0.125, 0., 0.1});
     }
 
     value_t test2(double x) {
-        return x <= 0.5 ? primitiveToConservative(1.4, {1.0, -2.0, 0.4}) : primitiveToConservative(1.4, {1.0, 2.0, 0.4});
+        return x <= 0.5 ? primitiveToConservative2D(1.4, {1.0, -2.0, 0.4}) : primitiveToConservative2D(1.4, {1.0, 2.0, 0.4});
     }
 
     value_t test3(double x) {
-        return x <= 0.5 ? primitiveToConservative(1.4, {1.0, 0.0, 1000.}) : primitiveToConservative(1.4, {1.0, 0., 0.01});
+        return x <= 0.5 ? primitiveToConservative2D(1.4, {1.0, 0.0, 1000.}) : primitiveToConservative2D(1.4, {1.0, 0., 0.01});
     }
 
     value_t test4(double x) {
-        return x <= 0.5 ? primitiveToConservative(1.4, {1.0, 0.0, 0.01}) : primitiveToConservative(1.4, {1.0, 0., 100.});
+        return x <= 0.5 ? primitiveToConservative2D(1.4, {1.0, 0.0, 0.01}) : primitiveToConservative2D(1.4, {1.0, 0., 100.});
     }
 
     value_t test5(double x) {
-        return x <= 0.5 ? primitiveToConservative(1.4, {5.99924, 19.5975, 460.894}) : primitiveToConservative(1.4, {5.99242, -6.19633, 46.095});
+        return x <= 0.5 ? primitiveToConservative2D(1.4, {5.99924, 19.5975, 460.894}) : primitiveToConservative2D(1.4, {5.99242, -6.19633, 46.095});
     }
 }
 
@@ -311,7 +311,7 @@ public:
         const value_t uL = utils::conservativeToPrimitive(this->_gamma, u0);
         const value_t uR = utils::conservativeToPrimitive(this->_gamma, u1);
 
-        return utils::primitiveToConservative(this->_gamma, RiemannSolverPrimitive(uL, uR));
+        return utils::primitiveToConservative2D(this->_gamma, RiemannSolverPrimitive(uL, uR));
     }
 
     double getMaxDt(const std::vector<value_t> &u)
