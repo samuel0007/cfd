@@ -12,16 +12,16 @@ find_package(PythonLibs REQUIRED)
 find_package(Python3)
 find_package(PkgConfig REQUIRED)
 
-set(Ascent_DIR /home/samrusso/ascent/install/ascent-checkout/lib/cmake/ascent)
-set(CONDUIT_DIR /home/samrusso/ascent/install/conduit-v0.9.2/)
-set(VTKM_DIR /home/samrusso/ascent/install/vtk-m-v2.1.0/)
-set(CAMP_DIR /home/samrusso/ascent/install/camp-v2024.02.1)
-set(UMPIRE_DIR /home/samrusso/ascent/install/umpire-2024.02.1)
-set(RAJA_DIR /home/samrusso/ascent/install/raja-v2024.02.1)
-set(MFEM_DIR /home/samrusso/ascent/install/mfem-4.6)
+# set(Ascent_DIR /home/samrusso/ascent/install/ascent-checkout/lib/cmake/ascent)
+# set(CONDUIT_DIR /home/samrusso/ascent/install/conduit-v0.9.2/)
+# set(VTKM_DIR /home/samrusso/ascent/install/vtk-m-v2.1.0/)
+# set(CAMP_DIR /home/samrusso/ascent/install/camp-v2024.02.1)
+# set(UMPIRE_DIR /home/samrusso/ascent/install/umpire-2024.02.1)
+# set(RAJA_DIR /home/samrusso/ascent/install/raja-v2024.02.1)
+# set(MFEM_DIR /home/samrusso/ascent/install/mfem-4.6)
 
 
-find_package(Ascent REQUIRED)
+# find_package(Ascent REQUIRED)
 
 include_directories(
         ${PYTHON3_INCLUDE_DIRS}
@@ -41,7 +41,7 @@ add_executable(${PROJECT_NAME}_7 assignment_7.cpp)
 add_executable(${PROJECT_NAME}_8 assignment_8.cpp include/insitu.hpp)
 add_executable(${PROJECT_NAME}_9 assignment_9.cpp)
 
-add_executable(${PROJECT_NAME}_test ascent_test.cpp)
+# add_executable(${PROJECT_NAME}_test ascent_test.cpp)
 
 
 target_link_libraries(
@@ -70,14 +70,14 @@ target_link_libraries(
         ${PROJECT_NAME}_8
         python3.8
         Eigen3::Eigen
-        ascent::ascent
+        # ascent::ascent
 )
 
-target_link_libraries(
-        ${PROJECT_NAME}_test
-        PRIVATE
-        ascent::ascent
-)
+# target_link_libraries(
+        # ${PROJECT_NAME}_test
+        # PRIVATE
+        # ascent::ascent
+# )
 
 target_link_libraries(
         ${PROJECT_NAME}_9

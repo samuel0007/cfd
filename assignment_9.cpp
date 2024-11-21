@@ -128,6 +128,26 @@ namespace initialconditions {
         {
             return {0.125, 0, 0, 0.1};
         }
+    };
+
+    value_t RP_test1_1D(point2D_t x) {
+        return x[1] <= 0.5 ? value_t({1.0, 0.0, 0.0, 1.0}) : value_t({0.125, 0.0, 0.0, 0.1});
+    }
+
+    value_t RP_test2_1D(point2D_t x) {
+        return x[1] <= 0.5 ? value_t({1.0, 0.0, -2.0, 0.4}) : value_t({1.0, 0.0, 2.0, 0.4});
+    }
+
+    value_t RP_test3_1D(point2D_t x) {
+        return x[1] <= 0.5 ? value_t({1.0, 0.0, 0.0, 1000.0}) : value_t({1.0, 0.0, 0.0, 0.01});
+    }
+
+    value_t RP_test4_1D(point2D_t x) {
+        return x[1] <= 0.5 ? value_t({1.0, 0.0, 0.0, 0.01}) : value_t({1.0, 0.0, 0.0, 100.0});
+    }
+
+    value_t RP_test5_1D(point2D_t x) {
+        return x[1] <= 0.5 ? value_t({5.99924, 0., 19.5975, 460.894}) : value_t({5.99242, 0., -6.19633, 46.095});
     }
 
 }
@@ -178,6 +198,7 @@ namespace NumericalFlux {
     struct RI{};
     struct LF{};
     struct SLIC{};
+    struct GOD{};
 }
 
 namespace FluxFunction {
@@ -196,8 +217,8 @@ namespace SOURCE {
 template <typename NumericalFluxT, typename FluxFunctionT, typename EOST, typename SourceT>
 class ConservationProblem {
 public:
-    ConservationProblem(NumericalFluxT numericalFluxT, FluxFunctionT fluxFunctionT, EOST eosT, SourceT sourceT, double gamma, double dx, double dy, double C = 0.8):
-        _numericalFluxT(numericalFluxT), _fluxFunctionT(fluxFunctionT), _eosT(eosT), _sourceT(sourceT), _gamma(gamma), _dx(dx), _dy(dy), _C(C) {};
+    ConservationProblem(NumericalFluxT numericalFluxT, FluxFunctionT fluxFunctionT, EOST eosT, SourceT sourceT, double gamma, double dx, double dy, double C = 0.8, double eps = 1e-10, int max_it = 100):
+        _numericalFluxT(numericalFluxT), _fluxFunctionT(fluxFunctionT), _eosT(eosT), _sourceT(sourceT), _gamma(gamma), _dx(dx), _dy(dy), _C(C), _eps(eps), _max_it(max_it) {};
 
     double getMaxDt(std::ranges::input_range auto &&solution) {
         return _getMaxDT(this->_fluxFunctionT, solution);
@@ -237,6 +258,13 @@ public:
         return _flux;
     }
 
+    constexpr double getDelta(auto fdt) {
+        if constexpr (std::is_same_v<decltype(fdt), FluxDirection::F>) {
+            return _dx;
+        } else {
+            return _dy;
+        }
+    }
 
     v1Dvalue_t getSlopeLimitedFlux(std::ranges::input_range auto const& solution, size_t nk_g, double dt, auto fdt) {
         const size_t nk_tot = solution.size();
@@ -311,15 +339,17 @@ public:
     value_t f(auto fdt, const value_t& u) {
         return _f(this->_fluxFunctionT, fdt, u);
     }
-    value_t _f(FluxFunction::Euler, FluxDirection::F, const value_t& u);
-    value_t _f(FluxFunction::Euler, FluxDirection::G, const value_t& u);
+
+    // Riemann Solver
+    value_t RiemannSolver(auto fdt, const value_t& uL, const value_t& uR) {
+        return _RiemannSolver(this->_fluxFunctionT, fdt, uL, uR);
+    }
 
     // EOS
     vvalue_t conservativeToPrimitive(const vvalue_t& solution);
     value_t  conservativeToPrimitive(const value_t&  u);
     vvalue_t primitiveToConservative(const vvalue_t& primitive_solution);
     value_t  primitiveToConservative(const value_t&  q);
-
 private:
     // Specialisation
     NumericalFluxT _numericalFluxT;
@@ -334,12 +364,18 @@ private:
     v1Dvalue_t _vSlopeLimiterR;
     std::vector<double> _vSlopeLimiterPhi;
 
-
     double _dx;
     double _dy;
     double _gamma;
     double _C;
+
+    const double _eps;
+    const int _max_it;
     
+    // Flux functions
+    value_t _f(FluxFunction::Euler, FluxDirection::F, const value_t& u);
+    value_t _f(FluxFunction::Euler, FluxDirection::G, const value_t& u);
+
     // CFL conditions
     double _getMaxDT(FluxFunction::Euler, std::ranges::input_range auto &&u);
 
@@ -353,6 +389,8 @@ private:
     value_t _getNumericalFlux(NumericalFlux::CENTRAL,  auto fdt, std::ranges::input_range auto &&u, size_t face_idx, double dt);
     value_t _getNumericalFlux(NumericalFlux::RI,       auto fdt, std::ranges::input_range auto &&u, size_t face_idx, double dt);
     value_t _getNumericalFlux(NumericalFlux::LF,       auto fdt, std::ranges::input_range auto &&u, size_t face_idx, double dt);
+    value_t _getNumericalFlux(NumericalFlux::GOD,      auto fdt, std::ranges::input_range auto &&u, size_t face_idx, double dt);
+
 
     value_t _getNumericalFlux(NumericalFlux::LF,       auto fdt, const value_t& uL, const value_t& uR, const value_t& fL, const value_t& fR, double dt);
     value_t _getNumericalFlux(NumericalFlux::RI,       auto fdt, const value_t& uL, const value_t& uR, const value_t& fL, const value_t& fR, double dt);
@@ -366,13 +404,27 @@ private:
     // Source terms
     value_t _getSource(SOURCE::NullSource,           const value_t& u, const point2D_t& cell_centroid);
     value_t _getSource(SOURCE::CylindricalGeometric, const value_t& u, const point2D_t& cell_centroid);
+
+    // Riemann Solvers
+
+    // Euler
+    value_t _RiemannSolver(FluxFunction::Euler, auto fdt, const value_t& uL, const value_t& uR);
+    std::pair<value_t, double> _RiemannSolver1D(FluxFunction::Euler, const value_t& uL1D, const value_t& uR1D);
+    double newtons_raphson_pressure(double rhoL, double vL, double pL, double rhoR, double vR, double pR);
+    double pressure_function(double p_star, double rhoK, double vK, double pK, double A_K, double B_K, double cs_K);
+    double pressure_function_derivative(double p_star, double rhoK, double pK, double A_K, double B_K, double cs_K);
+    double compute_S_K(double p_star, double pK, double vK, double cs_K_hat);
+    value_t rarefaction_fan_K(double rhoK, double vK, double pK, double cs_K_hat);
+    double compute_rho_star_K(double p_star, double pK, double rhoK);
 };
 
 // --------------------- Speed of sound ---------------------
 
 template <typename NF, typename FF, typename EOST, typename SourceT>
 double ConservationProblem<NF, FF, EOST, SourceT>::_getSpeedOfSound(FluxFunction::Euler, const value_t& u) {
-    return sqrt(this->_gamma * (this->_gamma - 1.) * (u[3] - 0.5 * u[1] * u[1] / u[3]) / u[0]);
+    const auto q = this->conservativeToPrimitive(u);
+    // cs = sqrt(gamma rho / p)
+    return sqrt(this->_gamma * q[0] / q[3]);
 }
 
 // --------------------- CFL Condition ---------------------
@@ -384,7 +436,7 @@ double ConservationProblem<NF, FF, EOST, SourceT>::_getMaxDT(FluxFunction::Euler
         for (const auto &el : row)
         {
             const double a = sqrt((el[1] * el[1] + el[2] * el[2]) / (el[0]*el[0])) + this->getSpeedOfSound(el);
-            max_a = std::max<double>(max_a, a);
+            max_a = std::max(max_a, a);
         }
     }
     return _C * std::min(_dx, _dy) / max_a;
@@ -409,12 +461,14 @@ value_t ConservationProblem<NF, FF, EOST, SourceT>::_getNumericalFlux(NumericalF
 
 template <typename NF, typename FF, typename EOST, typename SourceT>
 value_t ConservationProblem<NF, FF, EOST, SourceT>::_getNumericalFlux(NumericalFlux::LF, auto fdt, std::ranges::input_range auto &&u, size_t face_idx, double dt) {
-    return 0.5 * (_dx / dt) * (u[face_idx - 1] - u[face_idx]) + 0.5 * (_fluxFunctionAtCells[face_idx - 1] + _fluxFunctionAtCells[face_idx]);
+    double d = getDelta(fdt);
+    return 0.5 * (d / dt) * (u[face_idx - 1] - u[face_idx]) + 0.5 * (_fluxFunctionAtCells[face_idx - 1] + _fluxFunctionAtCells[face_idx]);
 }
 
 template <typename NF, typename FF, typename EOST, typename SourceT>
 value_t ConservationProblem<NF, FF, EOST, SourceT>::_getNumericalFlux(NumericalFlux::RI, auto fdt, std::ranges::input_range auto &&u, size_t face_idx, double dt) {
-    const value_t u_n = 0.5 * (u[face_idx - 1] + u[face_idx] + dt / _dx * (_fluxFunctionAtCells[face_idx - 1] - _fluxFunctionAtCells[face_idx]));
+    double d = getDelta(fdt);
+    const value_t u_n = 0.5 * (u[face_idx - 1] + u[face_idx] + dt / d * (_fluxFunctionAtCells[face_idx - 1] - _fluxFunctionAtCells[face_idx]));
     return f(fdt, u_n);
 }
 
@@ -424,15 +478,24 @@ value_t ConservationProblem<NF, FF, EOST, SourceT>::_getNumericalFlux(NumericalF
 }
 
 
+template <typename NF, typename FF, typename EOST, typename SourceT>
+value_t ConservationProblem<NF, FF, EOST, SourceT>::_getNumericalFlux(NumericalFlux::GOD, auto fdt, std::ranges::input_range auto &&u, size_t face_idx, double dt) {
+    value_t res = this->RiemannSolver(fdt, u[face_idx - 1], u[face_idx]);
+    return f(fdt, res);
+}
+
+
 // Need to implement this interface for 2nd order schemes
 template <typename NF, typename FF, typename EOST, typename SourceT>
 value_t ConservationProblem<NF, FF, EOST, SourceT>::_getNumericalFlux(NumericalFlux::LF, auto fdt, const value_t& uL, const value_t& uR, const value_t& fL, const value_t& fR, double dt) {
-    return 0.5 * (_dx / dt) * (uL - uR) + 0.5 * (fL + fR);
+    double d = getDelta(fdt);
+    return 0.5 * (d / dt) * (uL - uR) + 0.5 * (fL + fR);
 }
 
 template <typename NF, typename FF, typename EOST, typename SourceT>
 value_t ConservationProblem<NF, FF, EOST, SourceT>::_getNumericalFlux(NumericalFlux::RI, auto fdt, const value_t& uL, const value_t& uR, const value_t& fL, const value_t& fR, double dt) {
-    const value_t u_n = 0.5 * (uL + uR + dt / _dx * (fL - fR));
+    double d = getDelta(fdt);
+    const value_t u_n = 0.5 * (uL + uR + dt / d * (fL - fR));
     return f(fdt, u_n);
 }
 
@@ -448,10 +511,10 @@ value_t ConservationProblem<NF, FF, EOST, SourceT>::_f(FluxFunction::Euler, Flux
 {
     auto q = this->conservativeToPrimitive(u);
     const auto &rho = q[0];
-    const auto &vx = q[1];
-    const auto &vy = q[2];
-    const auto &p = q[3];
-    const auto &E = u[3];
+    const auto &vx  = q[1];
+    const auto &vy  = q[2];
+    const auto &p   = q[3];
+    const auto &E   = u[3];
 
     return {
         rho * vx,
@@ -465,10 +528,10 @@ template <typename NF, typename FF, typename EOST, typename SourceT>
 value_t ConservationProblem<NF, FF, EOST, SourceT>::_f(FluxFunction::Euler, FluxDirection::G, const value_t& u) {
     auto q = this->conservativeToPrimitive(u);
     const auto &rho = q[0];
-    const auto &vx = q[1];
-    const auto &vy = q[2];
-    const auto &p = q[3];
-    const auto &E = u[3];
+    const auto &vx  = q[1];
+    const auto &vy  = q[2];
+    const auto &p   = q[3];
+    const auto &E   = u[3];
 
     return {
         rho * vy,
@@ -569,6 +632,225 @@ value_t ConservationProblem<NF, FF, EOST, SourceT>::_getSource(SOURCE::Cylindric
 };
 
 // --------------------- END Source Term ---------------------
+// --------------------- Riemann Solvers ---------------------
+
+
+template <typename NF, typename FF, typename EOST, typename SourceT>
+double ConservationProblem<NF, FF, EOST, SourceT>::compute_rho_star_K(double p_star, double pK, double rhoK)
+{
+    if (p_star > pK)
+    { // Shock
+        double r = p_star / pK;
+        double gr = (_gamma - 1) / (_gamma + 1);
+        return rhoK * (r + gr) / (gr * r + 1);
+    }
+    else
+    { // Rarefaction
+        return rhoK * std::pow(p_star / pK, (1. / _gamma));
+    }
+}
+
+// PRE: cs_k_hat = cs_L or -cs_R
+template <typename NF, typename FF, typename EOST, typename SourceT>
+double ConservationProblem<NF, FF, EOST, SourceT>::compute_S_K(double p_star, double pK, double vK, double cs_K_hat)
+{
+    return vK - cs_K_hat * sqrt((_gamma + 1) * p_star / (2 * _gamma * pK) + (_gamma - 1) / (2 * _gamma));
+}
+
+// PRE: cs_k_hat = cs_L or -cs_R
+template <typename NF, typename FF, typename EOST, typename SourceT>
+value_t ConservationProblem<NF, FF, EOST, SourceT>::rarefaction_fan_K(double rhoK, double vK, double pK, double cs_K_hat)
+{
+    const double rho = rhoK * std::pow(2. / (_gamma + 1.) + vK * (_gamma - 1.) / ((_gamma + 1.) * cs_K_hat), 2 / (_gamma - 1));
+    const double v = (2 / (_gamma + 1)) * (cs_K_hat + vK * (_gamma - 1) / 2.);
+    const double p = pK * std::pow(2. / (_gamma + 1) + vK * (_gamma - 1.) / ((_gamma + 1) * cs_K_hat), (2. * _gamma) / (_gamma - 1));
+    return {rho, v, p};
+}
+
+template <typename NF, typename FF, typename EOST, typename SourceT>
+double ConservationProblem<NF, FF, EOST, SourceT>::pressure_function(double p_star, double rhoK, double vK, double pK, double A_K, double B_K, double cs_K)
+{
+    if (p_star > pK)
+    {
+        // Shock
+        return (p_star - pK) * sqrt(A_K / (p_star + B_K));
+    }
+    else
+    {
+        // Rarefaction
+        return (2. * cs_K / (this->_gamma - 1.)) * (std::pow(p_star / pK, (this->_gamma - 1) / (2 * this->_gamma)) - 1);
+    }
+}
+
+template <typename NF, typename FF, typename EOST, typename SourceT>
+double ConservationProblem<NF, FF, EOST, SourceT>::pressure_function_derivative(double p_star, double rhoK, double pK, double A_K, double B_K, double cs_K)
+    {
+        if (p_star > pK)
+        {
+            // Shock
+            return sqrt(A_K / (B_K + p_star)) * (1. - (p_star - pK) / (2 * (B_K + p_star)));
+        }
+        else
+        {
+            // Rarefaction
+            return (1. / (rhoK * cs_K)) * std::pow(p_star / pK, -(_gamma + 1) / (2 * _gamma));
+        }
+    }
+
+template <typename NF, typename FF, typename EOST, typename SourceT>
+double ConservationProblem<NF, FF, EOST, SourceT>::newtons_raphson_pressure(double rhoL, double vL, double pL, double rhoR, double vR, double pR) {
+    const double A_L = 2. / ((this->_gamma + 1) * rhoL);
+    const double A_R = 2. / ((this->_gamma + 1) * rhoR);
+    const double B_L = pL * (this->_gamma - 1) / (this->_gamma + 1);
+    const double B_R = pR * (this->_gamma - 1) / (this->_gamma + 1);
+
+    const double cs_L = sqrt(this->_gamma * pL / rhoL);
+    const double cs_R = sqrt(this->_gamma * pR / rhoR);
+
+    double p_star_old;
+    // double p_star = 0.5 * (pL + pR);
+    double p_star = std::max(_eps, 0.5 * (pL + pR) - 0.125 * (vR - vL) * (rhoL + rhoR) * (cs_L + cs_R));
+
+    int i = 0;
+    do
+    {
+        p_star_old = p_star;
+        const double f_L = pressure_function(p_star_old, rhoL, vL, pL, A_L, B_L, cs_L);
+        const double f_R = pressure_function(p_star_old, rhoR, vR, pR, A_R, B_R, cs_R);
+        const double f = f_L + f_R + (vR - vL);
+        const double f_d_L = pressure_function_derivative(p_star_old, rhoL, pL, A_L, B_L, cs_L);
+        const double f_d_R = pressure_function_derivative(p_star_old, rhoR, pR, A_R, B_R, cs_R);
+        const double f_d = f_d_L + f_d_R;
+        p_star = p_star_old - f / f_d;
+        ++i;
+    } while ((fabs(p_star - p_star_old) / p_star_old) > _eps && i < this->_max_it);
+
+    // if(qL != qR)
+    //     std::cout << i << " " << pL << " " << pR << " " <<  p_star << "\n";
+
+    return p_star;
+}
+
+template <typename NF, typename FF, typename EOST, typename SourceT>
+value_t ConservationProblem<NF, FF, EOST, SourceT>::_RiemannSolver(FluxFunction::Euler, auto fdt, const value_t& uL, const value_t& uR) {
+    int velocity_id;
+    int trans_velocity_id;
+    if constexpr (std::is_same_v<decltype(fdt), FluxDirection::F>) {
+        velocity_id = 1;
+        trans_velocity_id = 2;
+    } else {
+        trans_velocity_id = 1;
+        velocity_id = 2;
+    }
+
+    const value_t qL = conservativeToPrimitive(uL);
+    const value_t qR = conservativeToPrimitive(uR);
+
+    const value_t qL1D{qL[0], qL[velocity_id], qL[3]};
+    const value_t qR1D{qR[0], qR[velocity_id], qR[3]};
+    
+    // value_t q1D;
+    auto [q1D, S_star] = _RiemannSolver1D(FluxFunction::Euler{}, qL1D, qR1D);
+    // this could be done for any advected quantity by the solver
+    double trans_velocity = S_star < 0 ? qL[trans_velocity_id] : qR[trans_velocity_id];
+    
+    value_t primitive_res;
+    if constexpr (std::is_same_v<decltype(fdt), FluxDirection::F>) {
+        primitive_res = {q1D[0], q1D[1], trans_velocity, q1D[2]};
+    } else {
+        primitive_res = {q1D[0], trans_velocity, q1D[1], q1D[2]};
+    }
+    return primitiveToConservative(primitive_res);
+};
+
+template <typename NF, typename FF, typename EOST, typename SourceT>
+std::pair<value_t, double> ConservationProblem<NF, FF, EOST, SourceT>::_RiemannSolver1D(FluxFunction::Euler, const value_t& qL1D, const value_t& qR1D) {
+    const double &rhoL = qL1D[0];
+    const double &vL   = qL1D[1];
+    const double &pL   = qL1D[2];
+
+    const double &rhoR = qR1D[0];
+    const double &vR   = qR1D[1];
+    const double &pR   = qR1D[2];
+
+    const double p_star = newtons_raphson_pressure(rhoL, vL, pL, rhoR, vR, pR);
+
+    const double A_L = 2. / ((this->_gamma + 1) * rhoL);
+    const double A_R = 2. / ((this->_gamma + 1) * rhoR);
+    const double B_L = pL * (this->_gamma - 1) / (this->_gamma + 1);
+    const double B_R = pR * (this->_gamma - 1) / (this->_gamma + 1);
+
+    const double cs_L = sqrt(this->_gamma * pL / rhoL);
+    const double cs_R = sqrt(this->_gamma * pR / rhoR);
+
+    const double v_star = 0.5 * (vL + vR) + 0.5 * (pressure_function(p_star, rhoR, vR, pR, A_R, B_R, cs_R) - pressure_function(p_star, rhoL, vL, pL, A_L, B_L, cs_L));
+
+    const double rho_star_L = compute_rho_star_K(p_star, pL, rhoL);
+    const double rho_star_R = compute_rho_star_K(p_star, pR, rhoR);
+
+    const double cs_star_L = sqrt(this->_gamma * p_star / rho_star_L);
+    const double cs_star_R = sqrt(this->_gamma * p_star / rho_star_R);
+
+    value_t res;
+    // Left Wave is right of center -> uL
+    if (p_star > pL)
+    { // If shock, check if right of x = 0
+        double S_L = compute_S_K(p_star, pL, vL, cs_L);
+        if (S_L > 0) {
+            res = {rhoL, vL, pL};
+            return std::make_pair(res, v_star);
+        }
+    }
+    else
+    { // If rarefaction, check if tail right of x = 0
+        if ((vL - cs_L) > 0) {
+            res = {rhoL, vL, pL};
+            return std::make_pair(res, v_star);
+        }
+    }
+
+    // Right wave is left of center -> uR
+    if (p_star > pR)
+    { // If shock, check if left of x = 0
+        double S_R = compute_S_K(p_star, pR, vR, -cs_R);
+        if (S_R < 0) {
+            res = {rhoR, vR, rhoR};
+            return std::make_pair(res, v_star);
+        }
+    }
+    else
+    { // If rarefaction, check if tail left of x = 0
+        if ((vR + cs_R) < 0) {
+            res = {rhoR, vR, pR};
+            return std::make_pair(res, v_star);
+        }
+    }
+
+    // Left wave is a rarefaction fan that spans over the center
+    if ((p_star < pL) && ((vL - cs_L) < 0) && ((v_star - cs_star_L) > 0))
+    {
+        res = rarefaction_fan_K(rhoL, vL, pL, cs_L);
+        return std::make_pair(res, v_star);
+    }
+
+    // Right wave is a rarefaction fan that spans over the center
+    if ((p_star < pR) && ((vR + cs_R) > 0) && ((v_star + cs_star_R) < 0))
+    {
+        res = rarefaction_fan_K(rhoR, vR, pR, -cs_R);
+        return std::make_pair(res, v_star);
+    }
+
+    // Left wave is fully on the left, right wave is fully the right (rarefaction tails included)
+    // if v_star < 0 -> interface is at the right of the contact discontinuity
+    // else if v_star > 0 -> interface is at the left of the contact discontinuity
+    if (v_star < 0)
+    {
+        res = {rho_star_R, v_star, p_star};
+        return std::make_pair(res, v_star);
+    }
+    return std::make_pair(value_t{rho_star_L, v_star, p_star}, v_star);
+    // return std::make_tuple(value_t{rho_star_L, v_star, p_star}, v_star);
+}
 
 
 class Mesh
@@ -629,6 +911,16 @@ public:
         return _cellPoints;
     }
 
+    // obvious TODO
+    std::vector<double> getCellPoints1D()
+    {
+        std::vector<double> res(_ny);
+        for(size_t i = 0; i < _ny; ++i) {
+            res[i] = _cellPoints[0][i][1];
+        }
+        return res;
+    }
+
     const vpoint2D_t &getFullCellPoints()
     {
         return _fullCellPoints;
@@ -683,15 +975,15 @@ public:
             this->_bc(solution, _nx_g, _ny_g);
         };
     
-    void F_sweep(double dt) {
-        const double _dtdx = dt / this->_mesh.getDx();
+    void G_sweep(double dt) {
+        const double dtdy = dt / this->_mesh.getDy();
 
         for (size_t i = _nx_g; i < this->_nx + _nx_g; ++i)
         {
-            const v1Dvalue_t &flux = this->_problem.getFlux(solution[i], this->_ny_g, dt, FluxDirection::F{});
+            const v1Dvalue_t &flux = this->_problem.getFlux(solution[i], this->_ny_g, dt, FluxDirection::G{});
             for (size_t j = _ny_g; j < this->_ny + _ny_g; ++j)
             {
-                this->_solution_buffer[i][j] = solution[i][j] - _dtdx * (flux[j - _ny_g + 1] - flux[j - _ny_g]);
+                this->_solution_buffer[i][j] = solution[i][j] - dtdy * (flux[j - _ny_g + 1] - flux[j - _ny_g]);
             }
         }
 
@@ -704,16 +996,16 @@ public:
         }
     }
 
-    void G_sweep(double dt) {
-        const double _dtdy = dt / this->_mesh.getDy();
+    void F_sweep(double dt) {
+        const double dtdx = dt / this->_mesh.getDx();
 
         for (size_t j = _ny_g; j < this->_ny + _ny_g; ++j)
         {
             utils::ColumnView col(solution, j);
-            const v1Dvalue_t &flux = this->_problem.getFlux(col.as_range(), this->_nx_g, dt, FluxDirection::G{});
+            const v1Dvalue_t &flux = this->_problem.getFlux(col.as_range(), this->_nx_g, dt, FluxDirection::F{});
             for (size_t i = _nx_g; i < this->_nx + _nx_g; ++i)
             {
-                this->_solution_buffer[i][j] = solution[i][j] - _dtdy * (flux[i - _nx_g + 1] - flux[i - _nx_g]);
+                this->_solution_buffer[i][j] = solution[i][j] - dtdx * (flux[i - _nx_g + 1] - flux[i - _nx_g]);
             }
         }
 
@@ -732,14 +1024,14 @@ public:
         double min_dt = std::min(rest_dt, this->_problem.getMaxDt(solution));
 
         if(i%2 == 0) {
-            this->F_sweep(min_dt);
-            this->_bc(solution, _nx_g, _ny_g);
             this->G_sweep(min_dt);
+            this->_bc(solution, _nx_g, _ny_g);
+            this->F_sweep(min_dt);
             this->_bc(solution, _nx_g, _ny_g);
         } else {
-            this->G_sweep(min_dt);
-            this->_bc(solution, _nx_g, _ny_g);
             this->F_sweep(min_dt);
+            this->_bc(solution, _nx_g, _ny_g);
+            this->G_sweep(min_dt);
             this->_bc(solution, _nx_g, _ny_g);
         }
 
@@ -747,8 +1039,23 @@ public:
         return _ct < _final_time;
     }
 
+    bool evolve1D(int i) {
+        const double rest_dt = (_final_time - _ct);
+        double min_dt = std::min(rest_dt, this->_problem.getMaxDt(solution));
+
+        this->G_sweep(min_dt);
+        this->_bc(solution, _nx_g, _ny_g);
+            
+        _ct += min_dt;
+        return _ct < _final_time;
+    }
+
     void plot() {
         _plot(FF{}, SourceT{});
+    }
+
+    void plot1D() {
+        _plot1D(FF{}, SourceT{});
     }
 
     vvalue_t solution;
@@ -772,6 +1079,8 @@ private:
 
     // plotters
     void _plot(FluxFunction::Euler, SOURCE::NullSource);
+    void _plot1D(FluxFunction::Euler, SOURCE::NullSource);
+
 };
 
 // Plotters
@@ -819,6 +1128,42 @@ void Simulation<NF, FF, EOST, SourceT>::_plot(FluxFunction::Euler, SOURCE::NullS
     // plt::show();
 }
 
+template <typename NF, typename FF, typename EOST, typename SourceT>
+void Simulation<NF, FF, EOST, SourceT>::_plot1D(FluxFunction::Euler, SOURCE::NullSource) {
+    vvalue_t primitive_solution = this->_problem.conservativeToPrimitive(solution);
+
+    assert(_nx_g == 0 && _nx == 1);
+    std::vector<double> density(_ny);
+    std::vector<double> velocity(_ny);
+    std::vector<double> pressure(_ny);
+
+    for(int j = 0; j < _ny; ++j) {
+        density[j]    = primitive_solution[0][_ny_g + j][0];
+        velocity[j]   = primitive_solution[0][_ny_g + j][2];
+        pressure[j]   = primitive_solution[0][_ny_g + j][3];
+    }
+
+    auto cell_points = _mesh.getCellPoints1D();
+  
+    plt::clf();
+    plt::suptitle(boost::lexical_cast<std::string>(this->_ct));
+    plt::subplot(2, 2, 1);
+    plt::title("Pressure");
+    plt::plot(cell_points, pressure, "r*");
+    // plt::imshow(pP, _ny, _nx, 1);
+
+    plt::subplot(2, 2, 2);
+    plt::title("Density");
+    plt::plot(cell_points, density, "r*");
+
+
+    plt::subplot(2, 2, 3);
+    plt::title("Velocity");
+    plt::plot(cell_points, velocity, "r*");
+
+    plt::pause(0.01);
+}
+
 // Full case description
 namespace cases  {
     struct EulerForceIdealGAS {
@@ -827,12 +1172,22 @@ namespace cases  {
         EOS::IdealGas eos;
         SOURCE::NullSource source;
         double gamma = 1.4;
-        std::function<value_t(point2D_t)> ic = initialconditions::test3_2d;
+        std::function<value_t(point2D_t)> ic = initialconditions::RP_test1_1D;
         std::function<void(vvalue_t&, size_t, size_t)> bc = boundaryconditions::transmissive;
     };
 
     struct EulerSlicIdealGAS {
         NumericalFlux::SLIC numerical_flux;
+        FluxFunction::Euler flux_function;
+        EOS::IdealGas eos;
+        SOURCE::NullSource source;
+        double gamma = 1.4;
+        std::function<value_t(point2D_t)> ic = initialconditions::RP_test1_1D;
+        std::function<void(vvalue_t&, size_t, size_t)> bc = boundaryconditions::transmissive;
+    };
+
+    struct EulerGODIdealGAS {
+        NumericalFlux::FORCE numerical_flux;
         FluxFunction::Euler flux_function;
         EOS::IdealGas eos;
         SOURCE::NullSource source;
@@ -845,9 +1200,11 @@ namespace cases  {
 int main(int argc, char *argv[])
 {
     const int nx = 200;
+    // const int ny = 200;
     const int ny = 200;
-    const int nx_ghostcell = 2;
-    const int ny_ghostcell = 2;
+
+    const int nx_ghostcell = 1;
+    const int ny_ghostcell = 1;
     const double min_x = 0.;
     const double max_x = 1.;
     const double min_y = 0.;
@@ -855,17 +1212,16 @@ int main(int argc, char *argv[])
     const double dx = (max_x - min_x) / nx;
     const double dy = (max_y - min_y) / ny;
 
-
     Mesh mesh {
         nx, ny, nx_ghostcell, ny_ghostcell, min_x, max_x, min_y, max_y
     };
 
     const double gamma = 1.4;
-    const double C = 0.7;
-
+    const double C = 0.8;
 
     // cases::EulerForceIdealGAS test_case;
-    cases::EulerSlicIdealGAS test_case;
+    // cases::EulerSlicIdealGAS test_case;
+    cases::EulerGODIdealGAS test_case;
 
 
     ConservationProblem problem{
@@ -884,13 +1240,18 @@ int main(int argc, char *argv[])
     Simulation sim(final_time, problem, mesh, test_case.ic, test_case.bc);
     
     // plt::figure_size(1000, 600);
+    // sim.plot1D();
     sim.plot();
+
     int i = 0;
     while (sim.evolve(i))
+    // while (sim.evolve1D(i))
     {
         std::cout << "step #" << i << std::endl;
-        if (i % 5 == 0)
+        if (i % 10 == 0) {
+            // sim.plot1D();
             sim.plot();
+        }
         ++i;
     }
 
