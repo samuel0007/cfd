@@ -54,6 +54,18 @@ std::vector<double> operator*(double alpha, const std::vector<double> &v)
 
 
 namespace utils {
+    inline double normsq(double a, double b, double c) {
+        return a * a + b * b + c * c;
+    }
+
+    inline double norm(double a, double b, double c) {
+        return sqrt(normsq(a, b, c));
+    }
+
+    inline double dot(double a1, double b1, double c1, double a2, double b2, double c2) {
+        return a1 * a2 + b1 * b2 + c1 * c2;
+    }
+
     void resize_vec2D(auto& vec, size_t nx, size_t ny) {
         vec.resize(nx);
         for(auto& row: vec) {
@@ -109,46 +121,61 @@ namespace utils {
 
 // Initial conditions are always given in primitive variables
 namespace initialconditions {
-
-    value_t test0_2d(point2D_t x)
-    {
-        return x[0] <= 0.25 ? value_t({1.0, 1.0, 0.0, 1.0}) : value_t({0.1, 1.0, 0.0, 1.});
-    }
-
-    value_t test3_2d(point2D_t x)
-    {
-        double x_0 = 0.5;
-        double y_0 = 0.5;
-        double R = 0.4;
-        if ((x[0] - x_0) * (x[0] - x_0) + (x[1] - y_0) * (x[1] - y_0) < R * R)
+    namespace euler {
+        value_t test0_2d(point2D_t x)
         {
-            return {1, 0, 0, 1};
+            return x[0] <= 0.25 ? value_t({1.0, 1.0, 0.0, 1.0}) : value_t({0.1, 1.0, 0.0, 1.});
         }
-        else
+
+        value_t test3_2d(point2D_t x)
         {
-            return {0.125, 0, 0, 0.1};
+            double x_0 = 0.5;
+            double y_0 = 0.5;
+            double R = 0.4;
+            if ((x[0] - x_0) * (x[0] - x_0) + (x[1] - y_0) * (x[1] - y_0) < R * R)
+            {
+                return {1, 0, 0, 1};
+            }
+            else
+            {
+                return {0.125, 0, 0, 0.1};
+            }
+        };
+
+        value_t RP_test1_1D(point2D_t x) {
+            return x[1] <= 0.5 ? value_t({1.0, 0.0, 0.0, 1.0}) : value_t({0.125, 0.0, 0.0, 0.1});
         }
-    };
 
-    value_t RP_test1_1D(point2D_t x) {
-        return x[1] <= 0.5 ? value_t({1.0, 0.0, 0.0, 1.0}) : value_t({0.125, 0.0, 0.0, 0.1});
+        value_t RP_test2_1D(point2D_t x) {
+            return x[1] <= 0.5 ? value_t({1.0, 0.0, -2.0, 0.4}) : value_t({1.0, 0.0, 2.0, 0.4});
+        }
+
+        value_t RP_test3_1D(point2D_t x) {
+            return x[1] <= 0.5 ? value_t({1.0, 0.0, 0.0, 1000.0}) : value_t({1.0, 0.0, 0.0, 0.01});
+        }
+
+        value_t RP_test4_1D(point2D_t x) {
+            return x[1] <= 0.5 ? value_t({1.0, 0.0, 0.0, 0.01}) : value_t({1.0, 0.0, 0.0, 100.0});
+        }
+
+        value_t RP_test5_1D(point2D_t x) {
+            return x[1] <= 0.5 ? value_t({5.99924, 0., 19.5975, 460.894}) : value_t({5.99242, 0., -6.19633, 46.095});
+        }
     }
 
-    value_t RP_test2_1D(point2D_t x) {
-        return x[1] <= 0.5 ? value_t({1.0, 0.0, -2.0, 0.4}) : value_t({1.0, 0.0, 2.0, 0.4});
+    namespace mhd {
+        // Primitive variables:
+        // 0: rho, 1: vx, 2: vy, 3: vz, 4: p, 5: Bx, 6: By, 7: Bz
+        // Domain: [0, 1]
+        value_t toro_test_1d(point2D_t x) {
+            return x[1] <= 0.5 ? value_t({1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0}) : value_t({0.125, 0.0, 0.0, 0.0, 0.1, 0.0, 0.0, 0.0});
+        }
+        // Domain: [0, 800]
+        value_t brio_wu_test_1d(point2D_t x) {
+            return x[1] <= 400 ? value_t({1.0, 0.0, 0.0, 0.0, 1.0, 0.75, 1.0, 0.0}) : value_t({0.125, 0.0, 0.0, 0.0, 0.1, 0.75, -1.0, 0.0});
+        }
     }
 
-    value_t RP_test3_1D(point2D_t x) {
-        return x[1] <= 0.5 ? value_t({1.0, 0.0, 0.0, 1000.0}) : value_t({1.0, 0.0, 0.0, 0.01});
-    }
-
-    value_t RP_test4_1D(point2D_t x) {
-        return x[1] <= 0.5 ? value_t({1.0, 0.0, 0.0, 0.01}) : value_t({1.0, 0.0, 0.0, 100.0});
-    }
-
-    value_t RP_test5_1D(point2D_t x) {
-        return x[1] <= 0.5 ? value_t({5.99924, 0., 19.5975, 460.894}) : value_t({5.99242, 0., -6.19633, 46.095});
-    }
 
 }
 
@@ -203,6 +230,7 @@ namespace NumericalFlux {
 
 namespace FluxFunction {
     struct Euler{};
+    struct MHD1D{};
 };
 
 namespace EOS {
@@ -300,7 +328,8 @@ public:
             return std::min<double>(1., 2. / (1. + rE));
         });
 
-        const double _dtdx = dt / _dx;
+        const double d = getDelta(fdt);
+        const double _dtdx = dt / d;
         for (size_t i = 0; i <= nk; ++i)
         {
             value_t uL = solution[nk_g + i - 1];
@@ -376,11 +405,15 @@ private:
     value_t _f(FluxFunction::Euler, FluxDirection::F, const value_t& u);
     value_t _f(FluxFunction::Euler, FluxDirection::G, const value_t& u);
 
+    value_t _f(FluxFunction::MHD1D, FluxDirection::G, const value_t& u);
+
     // CFL conditions
     double _getMaxDT(FluxFunction::Euler, std::ranges::input_range auto &&u);
+    double _getMaxDT(FluxFunction::MHD1D, std::ranges::input_range auto &&u);
 
     // Speed of sound
     double _getSpeedOfSound(FluxFunction::Euler, const value_t& u);
+    double _getSpeedOfSound(FluxFunction::MHD1D, const value_t& u);
 
     // Numerical Fluxes
     value_t _getNumericalFlux(NumericalFlux::BACKWARD, auto fdt, std::ranges::input_range auto &&u, size_t face_idx, double dt);
@@ -391,15 +424,16 @@ private:
     value_t _getNumericalFlux(NumericalFlux::LF,       auto fdt, std::ranges::input_range auto &&u, size_t face_idx, double dt);
     value_t _getNumericalFlux(NumericalFlux::GOD,      auto fdt, std::ranges::input_range auto &&u, size_t face_idx, double dt);
 
-
     value_t _getNumericalFlux(NumericalFlux::LF,       auto fdt, const value_t& uL, const value_t& uR, const value_t& fL, const value_t& fR, double dt);
     value_t _getNumericalFlux(NumericalFlux::RI,       auto fdt, const value_t& uL, const value_t& uR, const value_t& fL, const value_t& fR, double dt);
     value_t _getNumericalFlux(NumericalFlux::FORCE,    auto fdt, const value_t& uL, const value_t& uR, const value_t& fL, const value_t& fR, double dt);
     
 
     // EOS
-    value_t  _conservativeToPrimitive(EOS::IdealGas, const value_t& u);
-    value_t  _primitiveToConservative(EOS::IdealGas, const value_t& u);
+    value_t  _conservativeToPrimitive(EOS::IdealGas, FluxFunction::Euler, const value_t& u);
+    value_t  _primitiveToConservative(EOS::IdealGas, FluxFunction::Euler, const value_t& u);
+    value_t  _conservativeToPrimitive(EOS::IdealGas, FluxFunction::MHD1D, const value_t& u);
+    value_t  _primitiveToConservative(EOS::IdealGas, FluxFunction::MHD1D, const value_t& u);
 
     // Source terms
     value_t _getSource(SOURCE::NullSource,           const value_t& u, const point2D_t& cell_centroid);
@@ -427,6 +461,13 @@ double ConservationProblem<NF, FF, EOST, SourceT>::_getSpeedOfSound(FluxFunction
     return sqrt(this->_gamma * q[0] / q[3]);
 }
 
+template <typename NF, typename FF, typename EOST, typename SourceT>
+double ConservationProblem<NF, FF, EOST, SourceT>::_getSpeedOfSound(FluxFunction::MHD1D, const value_t& u) {
+    const auto q = this->conservativeToPrimitive(u);
+    return sqrt(this->_gamma * q[0] / q[4]);
+}
+
+
 // --------------------- CFL Condition ---------------------
 
 template <typename NF, typename FF, typename EOST, typename SourceT>
@@ -436,6 +477,28 @@ double ConservationProblem<NF, FF, EOST, SourceT>::_getMaxDT(FluxFunction::Euler
         for (const auto &el : row)
         {
             const double a = sqrt((el[1] * el[1] + el[2] * el[2]) / (el[0]*el[0])) + this->getSpeedOfSound(el);
+            max_a = std::max(max_a, a);
+        }
+    }
+    return _C * std::min(_dx, _dy) / max_a;
+}
+
+template <typename NF, typename FF, typename EOST, typename SourceT>
+double ConservationProblem<NF, FF, EOST, SourceT>::_getMaxDT(FluxFunction::MHD1D, std::ranges::input_range auto &&solution) {
+    double max_a = 0;
+    for(const auto& row: solution) {
+        for (const auto &el : row)
+        {
+            // max_a = v + fast wave
+            const double& rho = el[0];
+            const double& Bx  = el[5];
+            const double& By  = el[6];
+            const double& Bz  = el[7];
+            const double cs = this->getSpeedOfSound(el);
+            const double cs2 = cs * cs;
+            const double B2 = utils::normsq(Bx, By, Bz);
+            const double cf = sqrt(0.5 * sqrt(cs2 + B2 / rho + sqrt((cs2 + B2 / rho)*(cs2 + B2 / rho) - 4 * (cs2 * Bx * Bx) / rho)));
+            const double a = sqrt(utils::normsq(el[1], el[2], el[3]) / (el[0]*el[0])) + cf;
             max_a = std::max(max_a, a);
         }
     }
@@ -541,6 +604,33 @@ value_t ConservationProblem<NF, FF, EOST, SourceT>::_f(FluxFunction::Euler, Flux
     };
 };
 
+template <typename NF, typename FF, typename EOST, typename SourceT>
+value_t ConservationProblem<NF, FF, EOST, SourceT>::_f(FluxFunction::MHD1D, FluxDirection::G, const value_t& u) {
+    auto q = this->conservativeToPrimitive(u);
+
+    const double& rho = q[0];
+    const double& vx  = q[1];
+    const double& vy  = q[2];
+    const double& vz  = q[3];
+    const double& p   = q[4];
+    const double& Bx  = q[5];
+    const double& By  = q[6];
+    const double& Bz  = q[7];
+    const double& U   = u[4];
+
+    const double B2 = utils::normsq(Bx, By, Bz);
+
+    return {
+        rho * vx,
+        rho * vx * vx + p + 0.5 * B2 - Bx * Bx,
+        rho * vx * vy - Bx * By,
+        rho * vx * vz - Bx * Bz,
+        (U + p + 0.5 * B2) * vx - utils::dot(vx, vy, vz, Bx, By, Bz) * Bx,
+        0, // DBx/Dt = 0
+        By * vx - Bx * vy,
+        Bz * vx - Bx * vz,
+    };
+}
 
 // --------------------- EOS ---------------------
 
@@ -563,7 +653,7 @@ vvalue_t ConservationProblem<NF, FF, EOST, SourceT>::conservativeToPrimitive(con
 
 template <typename NF, typename FF, typename EOST, typename SourceT>
 value_t ConservationProblem<NF, FF, EOST, SourceT>::conservativeToPrimitive(const value_t& u) {
-    return _conservativeToPrimitive(this->_eosT, u);
+    return _conservativeToPrimitive(this->_eosT, this->_fluxFunctionT, u);
 };
 
 
@@ -586,13 +676,13 @@ vvalue_t ConservationProblem<NF, FF, EOST, SourceT>::primitiveToConservative(con
 
 template <typename NF, typename FF, typename EOST, typename SourceT>
 value_t ConservationProblem<NF, FF, EOST, SourceT>::primitiveToConservative(const value_t& q) {
-    return _primitiveToConservative(this->_eosT, q);
+    return _primitiveToConservative(this->_eosT, this->_fluxFunctionT, q);
 };
 
 
 // ---- EOS EULER IDEAL GAS ----
 template <typename NF, typename FF, typename EOST, typename SourceT>
-value_t ConservationProblem<NF, FF, EOST, SourceT>::_conservativeToPrimitive(EOS::IdealGas, const value_t& q) {
+value_t ConservationProblem<NF, FF, EOST, SourceT>::_conservativeToPrimitive(EOS::IdealGas, FluxFunction::Euler, const value_t& q) {
     return {
             q[0],
             q[1] / q[0],
@@ -602,17 +692,66 @@ value_t ConservationProblem<NF, FF, EOST, SourceT>::_conservativeToPrimitive(EOS
 };
 
 template <typename NF, typename FF, typename EOST, typename SourceT>
-value_t ConservationProblem<NF, FF, EOST, SourceT>::_primitiveToConservative(EOS::IdealGas, const value_t& q) {
+value_t ConservationProblem<NF, FF, EOST, SourceT>::_primitiveToConservative(EOS::IdealGas, FluxFunction::Euler, const value_t& u) {
 return {
-        q[0],
-        q[0] * q[1],
-        q[0] * q[2],
-        q[3] / (this->_gamma - 1.) + 0.5 * q[0] * (q[1] * q[1] + q[2] * q[2]),
+        u[0],
+        u[0] * u[1],
+        u[0] * u[2],
+        u[3] / (this->_gamma - 1.) + 0.5 * u[0] * (u[1] * u[1] + u[2] * u[2]),
     };
 };
 
-// ---- END EOS EULER IDEAL GAS ----
-// ---------------------    END EOS   ---------------------
+// ---- EOS MHD1D IDEAL GAS ----
+template <typename NF, typename FF, typename EOST, typename SourceT>
+value_t ConservationProblem<NF, FF, EOST, SourceT>::_conservativeToPrimitive(EOS::IdealGas, FluxFunction::MHD1D, const value_t& u) {
+    const double& rho    = u[0];
+    const double& rhovx  = u[1];
+    const double& rhovy  = u[2];
+    const double& rhovz  = u[3];
+    const double& U      = u[4];
+    const double& Bx     = u[5];
+    const double& By     = u[6];
+    const double& Bz     = u[7];
+
+    const double vx = rhovx / rho;
+    const double vy = rhovy / rho;
+    const double vz = rhovz / rho;
+
+    return {
+            rho,
+            vx,
+            vy,
+            vz,
+            (this->_gamma - 1.) * (U - 0.5 * rho * utils::normsq(vx, vy, vz) - 0.5 * utils::normsq(Bx, By, Bz)),
+            Bx,
+            By,
+            Bz
+    };
+};
+
+template <typename NF, typename FF, typename EOST, typename SourceT>
+value_t ConservationProblem<NF, FF, EOST, SourceT>::_primitiveToConservative(EOS::IdealGas, FluxFunction::MHD1D, const value_t& q) {
+    const double& rho = q[0];
+    const double& vx  = q[1];
+    const double& vy  = q[2];
+    const double& vz  = q[3];
+    const double& p   = q[4];
+    const double& Bx  = q[5];
+    const double& By  = q[6];
+    const double& Bz  = q[7];
+
+    return {
+        rho,
+        rho * vx,
+        rho * vy,
+        rho * vz,
+        p / (this->_gamma - 1.) + 0.5 * rho * utils::normsq(vx, vy, vz) + 0.5 * utils::normsq(Bx, By, Bz),
+        Bx,
+        By,
+        Bz,
+    };
+};
+
 
 // --------------------- Source Terms ---------------------
 template <typename NF, typename FF, typename EOST, typename SourceT>
@@ -1080,7 +1219,7 @@ private:
     // plotters
     void _plot(FluxFunction::Euler, SOURCE::NullSource);
     void _plot1D(FluxFunction::Euler, SOURCE::NullSource);
-
+    void _plot1D(FluxFunction::MHD1D, SOURCE::NullSource);
 };
 
 // Plotters
@@ -1164,6 +1303,89 @@ void Simulation<NF, FF, EOST, SourceT>::_plot1D(FluxFunction::Euler, SOURCE::Nul
     plt::pause(0.01);
 }
 
+template <typename NF, typename FF, typename EOST, typename SourceT>
+void Simulation<NF, FF, EOST, SourceT>::_plot1D(FluxFunction::MHD1D, SOURCE::NullSource) {
+    vvalue_t primitive_solution = this->_problem.conservativeToPrimitive(solution);
+
+    assert(_nx_g == 0 && _nx == 1);
+    std::vector<double> density(_ny);
+    std::vector<double> velocity_x(_ny);
+    std::vector<double> velocity_y(_ny);
+    std::vector<double> velocity_z(_ny);
+    std::vector<double> v(_ny);
+    std::vector<double> pressure(_ny);
+    std::vector<double> By(_ny);
+    std::vector<double> Bz(_ny);
+    std::vector<double> E(_ny);
+
+
+    for(int j = 0; j < _ny; ++j) {
+        density[j]    = primitive_solution[0][_ny_g + j][0];
+        velocity_x[j] = primitive_solution[0][_ny_g + j][1];
+        velocity_y[j] = primitive_solution[0][_ny_g + j][2];
+        velocity_z[j] = primitive_solution[0][_ny_g + j][3];
+        pressure[j]   = primitive_solution[0][_ny_g + j][4];
+        By[j]         = primitive_solution[0][_ny_g + j][6];
+        Bz[j]         = primitive_solution[0][_ny_g + j][7];
+
+        v[j] = utils::norm(velocity_x[j], velocity_y[j], velocity_z[j]);
+        E[j] = solution[0][_ny_g + j][4];
+    }
+
+    auto cell_points = _mesh.getCellPoints1D();
+  
+    plt::clf();
+    plt::suptitle(boost::lexical_cast<std::string>(this->_ct));
+    plt::subplot(3, 3, 1);
+    plt::title("Pressure");
+    // plt::plot(cell_points, pressure, "r*");
+    plt::plot(cell_points, pressure);
+
+    // plt::imshow(pP, _ny, _nx, 1);
+
+    plt::subplot(3, 3, 2);
+    plt::title("Density");
+    // plt::plot(cell_points, density, "r*");
+    plt::plot(cell_points, density);
+
+    plt::subplot(3, 3, 3);
+    plt::title("Energy");
+    // plt::plot(cell_points, E, "r*");
+    plt::plot(cell_points, E);
+
+    plt::subplot(3, 3, 4);
+    plt::title("Velocity X");
+    // plt::plot(cell_points, velocity_x, "r*");
+    plt::plot(cell_points, velocity_x);
+
+    plt::subplot(3, 3, 5);
+    plt::title("Velocity Y");
+    // plt::plot(cell_points, velocity_y, "r*");
+    plt::plot(cell_points, velocity_y);
+
+    plt::subplot(3, 3, 6);
+    plt::title("Velocity Z");
+    // plt::plot(cell_points, velocity_z, "r*");
+    plt::plot(cell_points, velocity_z);
+
+    plt::subplot(3, 3, 7);
+    plt::title("V");
+    // plt::plot(cell_points, v, "r*");
+    plt::plot(cell_points, v);
+
+    plt::subplot(3, 3, 8);
+    plt::title("By");
+    // plt::plot(cell_points, By, "r*");
+    plt::plot(cell_points, By);
+
+    plt::subplot(3, 3, 9);
+    plt::title("Bz");
+    // plt::plot(cell_points, Bz, "r*");
+    plt::plot(cell_points, Bz);
+
+    plt::pause(0.01);
+}
+
 // Full case description
 namespace cases  {
     struct EulerForceIdealGAS {
@@ -1172,7 +1394,7 @@ namespace cases  {
         EOS::IdealGas eos;
         SOURCE::NullSource source;
         double gamma = 1.4;
-        std::function<value_t(point2D_t)> ic = initialconditions::RP_test1_1D;
+        std::function<value_t(point2D_t)> ic = initialconditions::euler::RP_test1_1D;
         std::function<void(vvalue_t&, size_t, size_t)> bc = boundaryconditions::transmissive;
     };
 
@@ -1182,7 +1404,7 @@ namespace cases  {
         EOS::IdealGas eos;
         SOURCE::NullSource source;
         double gamma = 1.4;
-        std::function<value_t(point2D_t)> ic = initialconditions::RP_test1_1D;
+        std::function<value_t(point2D_t)> ic = initialconditions::euler::RP_test1_1D;
         std::function<void(vvalue_t&, size_t, size_t)> bc = boundaryconditions::transmissive;
     };
 
@@ -1192,23 +1414,35 @@ namespace cases  {
         EOS::IdealGas eos;
         SOURCE::NullSource source;
         double gamma = 1.4;
-        std::function<value_t(point2D_t)> ic = initialconditions::test3_2d;
+        std::function<value_t(point2D_t)> ic = initialconditions::euler::test3_2d;
+        std::function<void(vvalue_t&, size_t, size_t)> bc = boundaryconditions::transmissive;
+    };
+
+    struct MHD1DForceIdealGas {
+        NumericalFlux::FORCE numerical_flux;
+        FluxFunction::MHD1D flux_function;
+        EOS::IdealGas eos;
+        SOURCE::NullSource source;
+        double gamma = 2;
+        std::function<value_t(point2D_t)> ic = initialconditions::mhd::brio_wu_test_1d;
         std::function<void(vvalue_t&, size_t, size_t)> bc = boundaryconditions::transmissive;
     };
 }
 
 int main(int argc, char *argv[])
 {
-    const int nx = 200;
-    // const int ny = 200;
-    const int ny = 200;
+    const double C = 0.8;
+    const double final_time = 100.0;
 
-    const int nx_ghostcell = 1;
-    const int ny_ghostcell = 1;
+    const int nx = 1;
+    const int nx_ghostcell = 0;
+    const int ny = 3000;
+    const int ny_ghostcell = 2;
+
     const double min_x = 0.;
     const double max_x = 1.;
     const double min_y = 0.;
-    const double max_y = 1.;
+    const double max_y = 800.;
     const double dx = (max_x - min_x) / nx;
     const double dy = (max_y - min_y) / ny;
 
@@ -1216,13 +1450,11 @@ int main(int argc, char *argv[])
         nx, ny, nx_ghostcell, ny_ghostcell, min_x, max_x, min_y, max_y
     };
 
-    const double gamma = 1.4;
-    const double C = 0.8;
 
     // cases::EulerForceIdealGAS test_case;
     // cases::EulerSlicIdealGAS test_case;
-    cases::EulerGODIdealGAS test_case;
-
+    // cases::EulerGODIdealGAS test_case;
+    cases::MHD1DForceIdealGas test_case;
 
     ConservationProblem problem{
         test_case.numerical_flux, 
@@ -1235,22 +1467,21 @@ int main(int argc, char *argv[])
         C
     };
 
-    const double final_time = 10.0;
 
     Simulation sim(final_time, problem, mesh, test_case.ic, test_case.bc);
     
     // plt::figure_size(1000, 600);
-    // sim.plot1D();
-    sim.plot();
+    sim.plot1D();
+    // sim.plot();
 
     int i = 0;
-    while (sim.evolve(i))
-    // while (sim.evolve1D(i))
+    // while (sim.evolve(i))
+    while (sim.evolve1D(i))
     {
         std::cout << "step #" << i << std::endl;
         if (i % 10 == 0) {
-            // sim.plot1D();
-            sim.plot();
+            sim.plot1D();
+            // sim.plot();
         }
         ++i;
     }
