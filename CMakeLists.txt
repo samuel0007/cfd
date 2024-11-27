@@ -40,6 +40,7 @@ add_executable(${PROJECT_NAME}_4 assignment_4.cpp)
 add_executable(${PROJECT_NAME}_7 assignment_7.cpp)
 add_executable(${PROJECT_NAME}_8 assignment_8.cpp include/insitu.hpp)
 add_executable(${PROJECT_NAME}_9 assignment_9.cpp)
+add_executable(${PROJECT_NAME}_10 assignment_10.cpp)
 
 # add_executable(${PROJECT_NAME}_test ascent_test.cpp)
 
@@ -81,6 +82,12 @@ target_link_libraries(
 
 target_link_libraries(
         ${PROJECT_NAME}_9
+        python3.8
+        Eigen3::Eigen
+)
+
+target_link_libraries(
+        ${PROJECT_NAME}_10
         python3.8
         Eigen3::Eigen
 )

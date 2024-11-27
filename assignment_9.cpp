@@ -371,7 +371,7 @@ public:
 
     // Riemann Solver
     value_t RiemannSolver(auto fdt, const value_t& uL, const value_t& uR) {
-        return _RiemannSolver(this->_fluxFunctionT, fdt, uL, uR);
+        return _ExactRiemannSolver(this->_fluxFunctionT, fdt, uL, uR);
     }
 
     // EOS
@@ -442,8 +442,8 @@ private:
     // Riemann Solvers
 
     // Euler
-    value_t _RiemannSolver(FluxFunction::Euler, auto fdt, const value_t& uL, const value_t& uR);
-    std::pair<value_t, double> _RiemannSolver1D(FluxFunction::Euler, const value_t& uL1D, const value_t& uR1D);
+    value_t _ExactRiemannSolver(FluxFunction::Euler, auto fdt, const value_t& uL, const value_t& uR);
+    std::pair<value_t, double> _ExactRiemannSolver1D(FluxFunction::Euler, const value_t& uL1D, const value_t& uR1D);
     double newtons_raphson_pressure(double rhoL, double vL, double pL, double rhoR, double vR, double pR);
     double pressure_function(double p_star, double rhoK, double vK, double pK, double A_K, double B_K, double cs_K);
     double pressure_function_derivative(double p_star, double rhoK, double pK, double A_K, double B_K, double cs_K);
@@ -871,7 +871,7 @@ double ConservationProblem<NF, FF, EOST, SourceT>::newtons_raphson_pressure(doub
 }
 
 template <typename NF, typename FF, typename EOST, typename SourceT>
-value_t ConservationProblem<NF, FF, EOST, SourceT>::_RiemannSolver(FluxFunction::Euler, auto fdt, const value_t& uL, const value_t& uR) {
+value_t ConservationProblem<NF, FF, EOST, SourceT>::_ExactRiemannSolver(FluxFunction::Euler, auto fdt, const value_t& uL, const value_t& uR) {
     int velocity_id;
     int trans_velocity_id;
     if constexpr (std::is_same_v<decltype(fdt), FluxDirection::F>) {
@@ -889,7 +889,7 @@ value_t ConservationProblem<NF, FF, EOST, SourceT>::_RiemannSolver(FluxFunction:
     const value_t qR1D{qR[0], qR[velocity_id], qR[3]};
     
     // value_t q1D;
-    auto [q1D, S_star] = _RiemannSolver1D(FluxFunction::Euler{}, qL1D, qR1D);
+    auto [q1D, S_star] = _ExactRiemannSolver1D(FluxFunction::Euler{}, qL1D, qR1D);
     // this could be done for any advected quantity by the solver
     double trans_velocity = S_star < 0 ? qL[trans_velocity_id] : qR[trans_velocity_id];
     
@@ -903,7 +903,7 @@ value_t ConservationProblem<NF, FF, EOST, SourceT>::_RiemannSolver(FluxFunction:
 };
 
 template <typename NF, typename FF, typename EOST, typename SourceT>
-std::pair<value_t, double> ConservationProblem<NF, FF, EOST, SourceT>::_RiemannSolver1D(FluxFunction::Euler, const value_t& qL1D, const value_t& qR1D) {
+std::pair<value_t, double> ConservationProblem<NF, FF, EOST, SourceT>::_ExactRiemannSolver1D(FluxFunction::Euler, const value_t& qL1D, const value_t& qR1D) {
     const double &rhoL = qL1D[0];
     const double &vL   = qL1D[1];
     const double &pL   = qL1D[2];
